@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+pandas
+httpx
+FinanceDataReader
+pydantic
+transformers
+torch
+python-dotenv

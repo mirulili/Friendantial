@@ -1,0 +1,11 @@
+
+services:
+  # MCP Server Container
+  app:
+    # Build an image using Dockerfile in current directory.
+    build: .
+    # Connect ports.
+    ports:
+      - "8000:8000"
+    # If exited unexpectedly, restart the program.
+    restart: always
