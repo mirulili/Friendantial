@@ -21,10 +21,11 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # --- Stage 2: Model Downloader ---
 # Download the HuggingFace model to be included in the final image
 FROM python:3.10-slim as downloader
+ARG SENTIMENT_MODEL_ID
 ENV HF_HOME=/opt/hf_home
 COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
-RUN python -c "from app.sentiment import get_sentiment_pipeline; get_sentiment_pipeline()"
+RUN python -c "from transformers import pipeline; pipeline('sentiment-analysis', model='${SENTIMENT_MODEL_ID}')"
 
 # --- Stage 3: Final Image ---
 FROM python:3.10-slim
@@ -47,8 +48,7 @@ COPY --from=downloader $HF_HOME $HF_HOME
 
 # App
 WORKDIR /app
-COPY --chown=appuser:appuser app/ ./app
-COPY --chown=appuser:appuser main.py .
+COPY --chown=appuser:appuser src/ .
 
 USER appuser
 EXPOSE 8000

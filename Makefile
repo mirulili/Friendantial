@@ -1,31 +1,50 @@
-# Makefile for Friendantial Python project
+# Makefile for Friendantial Project
 
-# 가상 환경 디렉토리. Windows에서는 Scripts, 다른 OS에서는 bin
-VENV_BIN := .venv/bin
-ifeq ($(OS),Windows_NT)
-    VENV_BIN := .venv/Scripts
-endif
+# Docker-related variables
+IMAGE_NAME := friendantial-app
+TAG := latest
+CONTAINER_NAME := friendantial
 
-.PHONY: help install run clean format lint
+.PHONY: all build up down logs shell clean help
+
+all: build up
+
+# Build the Docker image
+build:
+	@echo "Building Docker image: $(IMAGE_NAME):$(TAG)..."
+	docker build -t $(IMAGE_NAME):$(TAG) .
+
+# Start the service using Docker Compose
+up:
+	@echo "Starting service..."
+	docker-compose up -d
+
+# Stop and remove the service containers
+down:
+	@echo "Stopping service..."
+	docker-compose down
+
+# View logs of the running service
+logs:
+	@echo "Showing logs..."
+	docker-compose logs -f
+
+# Access the running container's shell
+shell:
+	@echo "Accessing container shell..."
+	docker exec -it $(CONTAINER_NAME) /bin/bash
+
+# Remove the Docker image
+clean: down
+	@echo "Removing Docker image: $(IMAGE_NAME):$(TAG)..."
+	docker rmi $(IMAGE_NAME):$(TAG)
 
 help:
-	@echo "Makefile for Friendantial"
-	@echo ""
-	@echo "Usage:"
-	@echo "  make install    - 의존성 설치"
-	@echo "  make run        - 개발 서버 실행 (uvicorn)"
-	@echo "  make clean      - __pycache__ 및 .pytest_cache 삭제"
-	@echo "  make format     - black과 isort로 코드 포맷팅"
-
-install:
-	@echo "Installing dependencies from requirements.txt..."
-	@$(VENV_BIN)/pip install -r requirements.txt
-
-run:
-	@echo "Starting development server..."
-	@$(VENV_BIN)/uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-
-clean:
-	@echo "Cleaning up python cache files..."
-	@find . -type f -name "*.py[co]" -delete
-	@find . -type d -name "__pycache__" -delete
+	@echo "Available commands:"
+	@echo "  make build   - Build the Docker image"
+	@echo "  make up      - Start the services in detached mode"
+	@echo "  make down    - Stop and remove the services"
+	@echo "  make logs    - Follow the logs of the services"
+	@echo "  make shell   - Access the running app container's shell"
+	@echo "  make clean   - Stop services and remove the Docker image"
+	@echo "  make all     - Build and start the services"
