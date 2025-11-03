@@ -16,16 +16,19 @@ ENV PATH="$VENV_PATH/bin:$PATH"
 
 COPY requirements.txt .
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install -r requirements.txt
+    pip install --no-cache-dir -r requirements.txt && \
+    find $VENV_PATH -name "__pycache__" -type d -exec rm -rf {} +
 
 # --- Stage 2: Model Downloader ---
 # Download the HuggingFace model to be included in the final image
-FROM python:3.10-slim as downloader
+FROM builder as downloader
 ARG SENTIMENT_MODEL_ID
 ENV HF_HOME=/opt/hf_home
-COPY --from=builder /opt/venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
-RUN python -c "from transformers import pipeline; pipeline('sentiment-analysis', model='${SENTIMENT_MODEL_ID}')"
+
+RUN python -c "from transformers import pipeline; pipeline('sentiment-analysis', model='${SENTIMENT_MODEL_ID}')" && \
+    # Remove unnecessary cache files from the model download
+    find $HF_HOME -name "*.pyc" -type f -delete && \
+    find $HF_HOME -name "__pycache__" -type d -exec rm -rf {} +
 
 # --- Stage 3: Final Image ---
 FROM python:3.10-slim

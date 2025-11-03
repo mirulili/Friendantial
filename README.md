@@ -13,7 +13,7 @@
 *   **데이터 분석**: Pandas
 *   **금융 데이터**: FinanceDataReader
 *   **뉴스 수집**: Google News RSS, httpx
-*   **감성 분석**: HuggingFace Transformers (`sangrimlee/bert-base-multilingual-cased-nsmc`)
+*   **감성 분석**: HuggingFace Transformers (`cardiffnlp/twitter-xlm-roberta-base-sentiment`)
 *   **웹 서버**: Uvicorn
 *   **컨테이너**: Docker, Docker Compose
 

@@ -1,10 +1,9 @@
-import re
 import logging
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict
 
 import pandas as pd
-import FinanceDataReader as fdr
+import yfinance as yf
 from fastapi import HTTPException
 
 from .config import TZ
@@ -19,10 +18,11 @@ def fetch_ohlcv(codes: List[str], end_date: Optional[str] = None, lookback_days:
     start_dt = end_dt - timedelta(days=max(lookback_days, 30))
     
     out: Dict[str, pd.DataFrame] = {}
-    for code in codes:
-        base = re.sub(r"\.[A-Z]{2}$", "", code)
-        try:
-            df = fdr.DataReader(base, start=start_dt.isoformat(), end=end_dt.isoformat())
+    try:
+        # yfinance can download multiple tickers at once
+        df_multi = yf.download(codes, start=start_dt, end=end_dt, progress=False)
+        for code in codes:
+            df = df_multi.xs(code, level=1, axis=1) if len(codes) > 1 else df_multi
             if df is None or df.empty:
                 out[code] = pd.DataFrame()
                 continue
@@ -34,7 +34,8 @@ def fetch_ohlcv(codes: List[str], end_date: Optional[str] = None, lookback_days:
             df = df.sort_index()
             df["value_traded"] = df["close"] * df["volume"]
             out[code] = df
-        except Exception as e:
-            logging.warning("Data load failed for %s (%s): %s", code, base, e)
-            out[code] = pd.DataFrame()
+    except Exception as e:
+        logging.error("yfinance data download failed: %s", e)
+        for code in codes:
+            out[code] = pd.DataFrame() # Return empty dataframe for all on failure
     return out

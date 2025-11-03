@@ -1,9 +1,10 @@
 fastapi
 uvicorn[standard]
 pandas
+numpy<2
 httpx
-FinanceDataReader
-pydantic
+yfinance
 transformers
-torch
+torch --index-url https://download.pytorch.org/whl/cpu
 python-dotenv
+sentencepiece

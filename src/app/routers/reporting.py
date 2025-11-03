@@ -10,7 +10,7 @@ router = APIRouter(
 @router.post("/summary", summary="추천 결과 요약 보고서 생성")
 async def create_recommendation_report(reco_response: RecoResponse):
     """
-    추천 결과(RecoResponse)를 입력받아 사람이 읽기 좋은 형태의 요약 보고서를 생성합니다.
+    추천 결과(RecoResponse)를 입력받아 요약 보고서를 생성합니다.
     """
     if not reco_response.candidates:
         return {"report": "추천된 종목이 없습니다."}

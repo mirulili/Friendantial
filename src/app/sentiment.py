@@ -1,11 +1,10 @@
-import re
 import logging
 from typing import List
 from urllib.parse import quote_plus
 import xml.etree.ElementTree as ET
 
 import httpx
-from transformers import AutoTokenizer, AutoModelForSequenceClassification, pipeline
+from transformers import XLMRobertaTokenizer, AutoModelForSequenceClassification, pipeline
 
 from .config import NEWS_MAX, SENTIMENT_MODEL_ID
 
@@ -16,8 +15,12 @@ def get_sentiment_pipeline():
     if _sentiment_pipe is not None:
         return _sentiment_pipe
     try:
-        tok = AutoTokenizer.from_pretrained(SENTIMENT_MODEL_ID)
-        mdl = AutoModelForSequenceClassification.from_pretrained(SENTIMENT_MODEL_ID)
+        # AutoTokenizer 대신 XLM-RoBERTa 전용 토크나이저를 명시적으로 사용합니다.
+        # 이렇게 하면 불필요한 자동 변환 시도를 건너뛰어 호환성 문제를 해결할 수 있습니다.
+        tok = XLMRobertaTokenizer.from_pretrained(SENTIMENT_MODEL_ID)
+        # use_safetensors=True를 통해 보안에 안전한 safetensors 형식으로 모델을 로드합니다.
+        # 이는 torch.load 관련 보안 취약점 경고를 해결합니다.
+        mdl = AutoModelForSequenceClassification.from_pretrained(SENTIMENT_MODEL_ID, use_safetensors=True)
         _sentiment_pipe = pipeline("sentiment-analysis", model=mdl, tokenizer=tok, device=-1)
         logging.info("Sentiment pipeline ready: %s", SENTIMENT_MODEL_ID)
         return _sentiment_pipe
@@ -48,12 +51,23 @@ async def fetch_news_titles(client: httpx.AsyncClient, query: str, limit: int = 
         return []
 
 def _stars_from_prediction(label: str, confidence: float) -> tuple[int, str]:
+    """모델 예측 결과를 바탕으로 별점(1-5)과 표시용 레이블을 반환합니다."""
     if confidence < 0.65:
         return 3, "중립"
-    if label == "positive":
-        return (5, "강력한 호재") if confidence >= 0.9 else (4, "호재")
-    else:  # "negative"
-        return (1, "강력한 악재") if confidence >= 0.9 else (2, "악재")
+
+    is_strong = confidence >= 0.9
+    str_label = str(label).lower()
+
+    # '1' 또는 'positive'는 긍정으로 처리
+    if str_label == "1" or str_label == "positive":
+        return (5, "강력한 호재") if is_strong else (4, "호재")
+    
+    # '0' 또는 'negative'는 부정으로 처리
+    if str_label == "0" or str_label == "negative":
+        return (1, "강력한 악재") if is_strong else (2, "악재")
+
+    # 'neutral' 레이블 또는 예상치 못한 레이블은 모두 중립으로 처리
+    return 3, "중립"
 
 def analyze_news_sentiment(headlines: List[str]) -> dict:
     if not headlines:

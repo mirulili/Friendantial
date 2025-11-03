@@ -37,9 +37,7 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
               }
             }
           }
@@ -78,9 +76,7 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": {
-                  "": "#/components/schemas/HTTPValidationError"
-                }
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
               }
             }
           }
@@ -136,9 +132,7 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {
-                  "": "#/components/schemas/RecoResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/RecoResponse" }
               }
             }
           },
@@ -146,9 +140,7 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": {
-                  "": "#/components/schemas/HTTPValidationError"
-                }
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
               }
             }
           }
@@ -206,9 +198,7 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": {
-                  "": "#/components/schemas/HTTPValidationError"
-                }
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
               }
             }
           }
@@ -227,9 +217,7 @@
           "required": true,
           "content": {
             "application/json": {
-              "schema": {
-                "": "#/components/schemas/RecoResponse"
-              }
+              "schema": { "$ref": "#/components/schemas/RecoResponse" }
             }
           }
         },
@@ -246,9 +234,7 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": {
-                  "": "#/components/schemas/HTTPValidationError"
-                }
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
               }
             }
           }
@@ -279,9 +265,7 @@
         "properties": {
           "detail": {
             "type": "array",
-            "items": {
-              "": "#/components/schemas/ValidationError"
-            },
+            "items": { "$ref": "#/components/schemas/ValidationError" },
             "title": "Detail"
           }
         },
@@ -332,7 +316,7 @@
           "news_sentiment": {
             "anyOf": [
               {
-                "": "#/components/schemas/NewsSentiment"
+                "$ref": "#/components/schemas/NewsSentiment"
               },
               {
                 "type": "null"
@@ -361,7 +345,7 @@
           "candidates": {
             "type": "array",
             "items": {
-              "": "#/components/schemas/RecoItem"
+              "$ref": "#/components/schemas/RecoItem"
             },
             "title": "Candidates"
           }

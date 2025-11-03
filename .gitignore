@@ -29,3 +29,6 @@ dist/
 
 # Log files
 *.log
+
+my-python-client/
+files/

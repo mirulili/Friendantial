@@ -16,4 +16,4 @@ except ZoneInfoNotFoundError:
 MARKET = os.getenv("MARKET", "KS")
 NEWS_MAX = int(os.getenv("NEWS_MAX", "3"))
 
-SENTIMENT_MODEL_ID = os.getenv("SENTIMENT_MODEL", "sangrimlee/bert-base-multilingual-cased-nsmc")
+SENTIMENT_MODEL_ID = os.getenv("SENTIMENT_MODEL", "cardiffnlp/twitter-xlm-roberta-base-sentiment")
