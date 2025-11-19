@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 import httpx
 
 from app.config import NEWS_MAX
@@ -14,26 +14,28 @@ router = APIRouter(
 )
 
 @router.get("/news-sentiment/{stock_name}", summary="특정 종목의 뉴스 감성 분석")
-async def get_news_sentiment_for_stock(stock_name: str):
+async def get_news_sentiment_for_stock(request: Request, stock_name: str):
     """
     주어진 종목 이름(또는 코드)에 대한 최신 뉴스를 수집하고 감성 분석을 수행합니다.
     """
+    sentiment_pipe = request.app.state.sentiment_pipe
+
     async with httpx.AsyncClient() as client:
         titles = await fetch_news_titles(client, stock_name, limit=NEWS_MAX)
 
     if not titles:
         return {"stock_name": stock_name, "summary": "뉴스를 찾을 수 없습니다.", "details": []}
 
-    analysis_result = analyze_news_sentiment(titles)
+    analysis_result = analyze_news_sentiment(sentiment_pipe, titles)
     return {"stock_name": stock_name, **analysis_result}
 
 @router.get("/technical-indicator/{stock_code}", summary="특정 종목의 기술적 지표 분석")
-async def get_technical_analysis(stock_code: str):
+async def get_technical_analysis(request: Request, stock_code: str):
     """
     주어진 종목 코드에 대한 과거 데이터를 기반으로 기술적 지표(모멘텀 등)를 계산합니다.
     """
     conf = FeatureConf()
-    data = fetch_ohlcv([stock_code], lookback_days=120)
+    data = await fetch_ohlcv(request, [stock_code], lookback_days=120)
     df = data.get(stock_code)
 
     if df is None or len(df) < conf.mom_long + 2:

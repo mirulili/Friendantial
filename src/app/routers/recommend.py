@@ -1,6 +1,6 @@
 from typing import Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Request, Depends
 
 from app.core import recommend
 from app.models import RecoResponse
@@ -11,11 +11,13 @@ router = APIRouter(
 )
 
 
-@router.get("/recommendations", response_model=RecoResponse)
+@router.get("/recommendations", response_model=RecoResponse, summary="종합 주식 추천")
 async def get_recommendations(
-    as_of: Optional[str] = Query(None, description="기준일 (YYYY-MM-DD)"),
-    n: int = Query(5, ge=1, le=10, description="추천할 종목 수"),
-    with_news: bool = Query(True, description="뉴스 감성 분석 포함 여부"),
+    recommendations: RecoResponse = Depends(recommend)
 ):
-    """모멘텀, 거래량, 뉴스 감성 점수를 종합하여 주식 종목을 추천합니다."""
-    return await recommend(as_of=as_of, n=n, with_news=with_news)
+    """
+    모멘텀, 거래량, 뉴스 감성 점수 및 시장 상황을 종합하여 상위 주식 종목을 추천합니다.
+    
+    FastAPI의 의존성 주입 시스템을 통해 `core.recommend` 함수를 직접 호출하여 결과를 반환합니다.
+    """
+    return recommendations

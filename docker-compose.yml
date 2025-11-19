@@ -1,11 +1,43 @@
+version: '3.8'
 
 services:
-  # MCP Server Container
-  app:
-    # Build an image using Dockerfile in current directory.
-    build: .
-    # Connect ports.
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: friendantial-api
+    env_file:
+      - .env
     ports:
       - "8000:8000"
-    # If exited unexpectedly, restart the program.
-    restart: always
+    volumes:
+      - ./src:/app/src
+      - ./.cache:/app/.cache
+    networks:
+      - friendantial-net
+    depends_on:
+      - db
+      - redis
+
+  db:
+    image: postgres:15
+    container_name: friendantial-db
+    env_file:
+      - .env
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - friendantial-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: friendantial-redis
+    networks:
+      - friendantial-net
+
+volumes:
+  pgdata:
+
+networks:
+  friendantial-net:
+    driver: bridge

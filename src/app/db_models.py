@@ -1,0 +1,34 @@
+from sqlalchemy import Column, Integer, String, Float, DateTime, Date, ForeignKey, JSON
+from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
+
+from .database import Base
+
+class RecommendationRun(Base):
+    __tablename__ = "recommendation_runs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    as_of = Column(Date, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Relationship to RecommendedStock
+    stocks = relationship("RecommendedStock", back_populates="run")
+
+class RecommendedStock(Base):
+    __tablename__ = "recommended_stocks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    run_id = Column(Integer, ForeignKey("recommendation_runs.id"), nullable=False)
+    
+    code = Column(String, nullable=False, index=True)
+    name = Column(String, nullable=False)
+    score = Column(Float, nullable=False)
+    weight = Column(Float, nullable=False)
+    reason = Column(String)
+    
+    # Storing complex data as JSON
+    momentum = Column(JSON)
+    news_sentiment = Column(JSON)
+
+    # Relationship to RecommendationRun
+    run = relationship("RecommendationRun", back_populates="stocks")
