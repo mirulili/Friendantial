@@ -1,6 +1,6 @@
 from typing import Optional
 
-from fastapi import APIRouter, Query, Request, Depends
+from fastapi import APIRouter, Query, Depends
 
 from app.core import recommend
 from app.models import RecoResponse
@@ -13,7 +13,8 @@ router = APIRouter(
 
 @router.get("/recommendations", response_model=RecoResponse, summary="종합 주식 추천")
 async def get_recommendations(
-    recommendations: RecoResponse = Depends(recommend)
+    # Depends(recommend)가 strategy 파라미터를 인식하도록 시그니처를 맞춰줍니다.
+    recommendations: RecoResponse = Depends(recommend),
 ):
     """
     모멘텀, 거래량, 뉴스 감성 점수 및 시장 상황을 종합하여 상위 주식 종목을 추천합니다.

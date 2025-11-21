@@ -2,7 +2,6 @@ import logging
 import asyncio
 import json
 from datetime import datetime, timedelta
-from typing import List, Optional, Dict
 from pathlib import Path
 import pandas as pd
 import httpx
@@ -111,43 +110,82 @@ async def _fetch_daily_prices(client: httpx.AsyncClient, redis_conn: redis.Redis
         logging.error("공공데이터 API 호출 실패 (date: %s): %s", date, e)
         return []
 
+async def _fetch_stock_info(client: httpx.AsyncClient, redis_conn: redis.Redis, stock_code: str) -> Optional[Dict]:
+    """특정 종목의 최신 정보를 공공데이터 API를 통해 가져옵니다. 결과는 1일간 캐시됩니다."""
+    clean_code = stock_code.split('.')[0]
+    cache_key = f"stock-info:{clean_code}"
+
+    # 1. Redis 캐시 확인
+    try:
+        cached_data = await redis_conn.get(cache_key)
+        if cached_data:
+            logging.debug("Reading stock info from Redis cache: %s", cache_key)
+            return json.loads(cached_data)
+    except Exception as e:
+        logging.warning("Redis cache read error for stock info, fetching from API: %s", e)
+
+    # 2. 캐시 없으면 API 호출.
+    # get_universe_from_market_data 함수를 재사용하여 최신 거래일의 데이터를 가져옵니다.
+    # 이 함수는 내부적으로 _fetch_daily_prices를 호출하고 최신 데이터를 찾습니다.
+    # market_code는 KOSPI 또는 KOSDAQ 중 하나여야 합니다. 종목 코드의 접미사를 기반으로 추정합니다.
+    market_code = "KOSPI" if stock_code.endswith(".KS") else "KOSDAQ"
+    
+    # get_universe_from_market_data는 튜플 리스트를 반환하므로, 전체 데이터를 다시 조회해야 합니다.
+    # 대신, _fetch_daily_prices를 직접 호출하여 로직을 단순화합니다.
+    # 최신 거래일의 모든 종목 정보를 가져와서 해당 종목을 찾습니다.
+    latest_prices = await get_latest_daily_prices(client, redis_conn)
+    if not latest_prices:
+        return None
+
+    for item in latest_prices:
+        if item.get('srtnCd') == clean_code:
+            try:
+                await redis_conn.set(cache_key, json.dumps(item), ex=timedelta(days=1).total_seconds())
+            except Exception as e:
+                logging.error("Redis cache write error for stock info: %s", e)
+            return item
+    return None
+
+async def get_latest_daily_prices(client: httpx.AsyncClient, redis_conn: redis.Redis) -> List[Dict]:
+    """최근 5일 중 가장 최신 거래일의 전체 시세 데이터를 반환합니다."""
+    for i in range(5):
+        date_to_check = datetime.now(TZ).date() - timedelta(days=i)
+        if date_to_check.weekday() >= 5: # 주말 제외
+            continue
+        
+        daily_prices = await _fetch_daily_prices(client, redis_conn, date_to_check)
+        if daily_prices:
+            logging.info(f"Found latest daily prices for date: {date_to_check}")
+            return daily_prices
+    return []
+
 async def get_universe_from_market_data(request: Request, market_code: str) -> List[Tuple[str, str]]:
     """
     공공데이터포털 API를 통해 조회한 최신 시장 데이터를 기반으로 유니버스를 생성합니다.
-    pykrx에 대한 의존성을 제거하고, 실제 거래 데이터를 기반으로 유니버스를 구성합니다.
     """
     redis_conn = request.app.state.redis
     async with httpx.AsyncClient() as client:
-        # 최근 5일간의 데이터를 확인하여 가장 최신 거래일을 찾습니다.
-        for i in range(5):
-            date_to_check = datetime.now(TZ).date() - timedelta(days=i)
-            if date_to_check.weekday() >= 5: # 주말 제외
+        daily_prices = await get_latest_daily_prices(client, redis_conn)
+
+        if not daily_prices:
+            return [] # 5일간 데이터를 찾지 못하면 빈 리스트 반환
+
+        universe = []
+        suffix = ".KS" if market_code.upper() == "KOSPI" else ".KQ"
+        
+        for item in daily_prices:
+            # 거래대금(trPrc)을 기준으로 필터링
+            turnover = float(item.get('trPrc', 0))
+            if turnover < UNIVERSE_MIN_TURNOVER_WON:
                 continue
-
-            logging.info(f"{date_to_check} 데이터로 유니버스 생성을 시도합니다.")
-            daily_prices = await _fetch_daily_prices(client, redis_conn, date_to_check)
-
-            if not daily_prices:
-                continue
-
-            universe = []
-            suffix = ".KS" if market_code.upper() == "KOSPI" else ".KQ"
             
-            for item in daily_prices:
-                # 거래대금(trPrc)을 기준으로 필터링
-                turnover = float(item.get('trPrc', 0))
-                if turnover < UNIVERSE_MIN_TURNOVER_WON:
-                    continue
-                
-                # 시장 구분(mrktCtg)을 기준으로 필터링
-                if item.get('mrktCtg') == market_code.upper():
-                    code = item.get('srtnCd')
-                    name = item.get('itmsNm')
-                    if code and name:
-                        # yfinance 형식에 맞게 접미사 추가
-                        universe.append((f"{code}{suffix}", name))
-            
-            if universe:
-                logging.info(f"총 {len(daily_prices)}개 종목 중 거래대금 및 시장 기준을 만족하는 {len(universe)}개 종목으로 유니버스를 확정합니다.")
-                return universe
-    return [] # 5일간 데이터를 찾지 못하면 빈 리스트 반환
+            # 시장 구분(mrktCtg)을 기준으로 필터링
+            if item.get('mrktCtg') == market_code.upper():
+                code = item.get('srtnCd')
+                name = item.get('itmsNm')
+                if code and name:
+                    # yfinance 형식에 맞게 접미사 추가
+                    universe.append((f"{code}{suffix}", name))
+        
+        logging.info(f"총 {len(daily_prices)}개 종목 중 거래대금 및 시장 기준을 만족하는 {len(universe)}개 종목으로 유니버스를 확정합니다.")
+        return universe

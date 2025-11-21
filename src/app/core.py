@@ -9,7 +9,7 @@ from fastapi import HTTPException, Request, Depends
 from sqlalchemy.orm import Session
 
 from .config import TZ, MARKET, NEWS_MAX
-from .models import RecoItem, RecoResponse, FeatureConf
+from .models import RecoItem, RecoResponse, FeatureConf, StockScore
 from .universe import get_universe
 from .market_data import fetch_ohlcv
 from .database import get_db
@@ -18,25 +18,32 @@ from .sentiment import fetch_news_titles, analyze_news_sentiment
 from .scoring import compute_features, score_stock
 import pandas as pd
 
-def get_stars_for_stock(news_score: float) -> int:
-    """종합 뉴스 점수를 바탕으로 1~5점의 별점을 부여합니다."""
-    if news_score >= 1.5:
-        return 5
-    if news_score >= 0.5:
-        return 4
-    if news_score <= -1.5:
-        return 1
-    if news_score <= -0.5:
-        return 2
-    return 3
+def calculate_stock_stars(score: float, market_regime: str) -> int:
+    """종합 점수와 시장 상황을 바탕으로 1~5점의 별점을 부여합니다."""
+    # 100점 만점 기준으로 별점 기준 조정
+    thresholds = {
+        "BULL":    [60, 70, 80, 90],  # 상승장: 별점 후하게
+        "NEUTRAL": [65, 75, 85, 95],  # 중립장: 보통
+        "BEAR":    [70, 80, 90, 97],  # 하락장: 별점 짜게
+    }.get(market_regime, [65, 75, 85, 95])
 
-async def recommend(request: Request, as_of: Optional[str] = None, n: int = 5, with_news: bool = True, db: Session = Depends(get_db)) -> RecoResponse:
+    if score >= thresholds[3]:
+        return 5
+    if score >= thresholds[2]:
+        return 4
+    if score >= thresholds[1]:
+        return 3
+    if score >= thresholds[0]:
+        return 2
+    return 1
+
+async def recommend(request: Request, as_of: Optional[str] = None, n: int = 5, with_news: bool = True, strategy: str = "default", db: Session = Depends(get_db)) -> RecoResponse:
     if as_of is None:
         as_of = datetime.now(TZ).date().isoformat()
     
     universe = await get_universe(request, 'KOSPI' if MARKET.upper() == 'KS' else 'KOSDAQ')
     if not universe:
-        raise HTTPException(status_code=503, detail="종목 유니버스를 가져올 수 없습니다. pykrx 또는 외부 API의 일시적인 문제일 수 있습니다.")
+        raise HTTPException(status_code=503, detail="종목 유니버스를 가져올 수 없습니다.")
 
     codes, names_list = zip(*universe)
     code_to_name_map = dict(zip(codes, names_list))
@@ -106,7 +113,7 @@ async def recommend(request: Request, as_of: Optional[str] = None, n: int = 5, w
 
     # 모멘텀 점수 상위 50개 종목을 1차 선별 (뉴스 분석 대상)
     pre_scored_stocks.sort(key=lambda x: x.score, reverse=True)
-    pre_selected_codes = [s.code for s in pre_scored_stocks[:50]]
+    pre_selected_codes = [s.code for s in pre_scored_stocks[:20]]
     logging.info(f"모멘텀 상위 {len(pre_selected_codes)}개 종목을 뉴스 분석 대상으로 확정합니다.")
 
     # --- 2단계: 선별된 종목에 대한 뉴스 감성 분석 ---
@@ -142,65 +149,88 @@ async def recommend(request: Request, as_of: Optional[str] = None, n: int = 5, w
                     news_data_map[code] = {"score": 0.0, "summary": "Failed to fetch news", "details": []}
 
     # --- 3단계: 최종 점수 계산을 위한 정규화 ---
-    # 모든 종목의 뉴스 점수를 수집하여 0과 1 사이로 정규화합니다.
-    # 이를 통해 개별 종목의 뉴스 점수를 전체 유니버스 내에서 상대적으로 평가할 수 있습니다.
-    all_news_scores = [news_data_map.get(code, {}).get("score", 0.0) for code in pre_selected_codes if code in news_data_map]
-    min_score, max_score = min(all_news_scores) if all_news_scores else (0, 0), max(all_news_scores) if all_news_scores else (0, 0)
-    
-    def normalize_news_score(score):
-        if max_score > min_score:
-            return (score - min_score) / (max_score - min_score)
-        return 0.5 # 모든 점수가 동일할 경우 중간값 반환
+    # 뉴스 점수와 변동성을 Z-점수로 정규화하여 상대적 위치를 평가합니다.
+    # Z-점수는 이상치에 덜 민감하여 안정적인 점수 산출에 유리합니다.
 
-    # --- 변동성 점수 계산 및 정규화 준비 ---
-    # 모든 종목의 피쳐와 변동성을 미리 계산합니다.
+    # --- 뉴스 점수 Z-점수 정규화 ---
+    all_news_scores = [news_data_map.get(code, {}).get("score", 0.0) for code in pre_selected_codes if code in news_data_map]
+    news_score_series = pd.Series(all_news_scores)
+    news_mean = news_score_series.mean()
+    news_std = news_score_series.std()
+
+    def get_news_z_score(score):
+        if news_std > 0:
+            return (score - news_mean) / news_std
+        return 0.0 # 모든 점수가 동일하면 Z-점수는 0
+
+    # --- 변동성 Z-점수 정규화 ---
     volatility_scores = [
         float(features_map[code]["ret1"].rolling(20).std().iloc[-2])
         for code in pre_selected_codes if code in features_map
     ]
+    vol_series = pd.Series(volatility_scores)
+    vol_mean = vol_series.mean()
+    vol_std = vol_series.std()
 
-    min_vol, max_vol = min(volatility_scores) if volatility_scores else (0, 0), max(volatility_scores) if volatility_scores else (0, 0)
-
-    def normalize_volatility(vol):
-        if max_vol > min_vol:
-            return (vol - min_vol) / (max_vol - min_vol)
-        return 0.5 # 모든 변동성이 동일할 경우 중간값 반환
+    def get_volatility_z_score(vol):
+        if vol_std > 0:
+            # 변동성은 낮을수록 좋으므로 Z-점수에 음수를 취해 페널티로 작용하도록 합니다.
+            # (높은 변동성 -> 높은 Z-점수 -> 점수 하락)
+            return (vol - vol_mean) / vol_std
+        return 0.0 # 모든 변동성이 동일하면 Z-점수는 0
 
     # --- 4단계: 최종 점수 계산 및 순위 결정 ---
-    scored: List[RecoItem] = []
+    raw_scored_stocks: List[StockScore] = []
     for code, feat in features_map.items():
         if feat.empty:
             continue
         
         analysis = news_data_map.get(code, {"score": 0.0}) if with_news else {"score": 0.0}
         raw_news_score = float(analysis.get("score", 0.0))
-        normalized_news_score = normalize_news_score(raw_news_score)
-        
-        news_summary = None
-        if with_news:
-            stock_stars = get_stars_for_stock(raw_news_score)
-            news_summary = {"summary": analysis.get("summary"), "stars": stock_stars, "details": analysis.get("details")}
+        news_z_score = get_news_z_score(raw_news_score)
 
-        
-        # 정규화된 변동성 점수를 사용합니다.
+        # Z-점수로 정규화된 변동성 점수를 사용합니다.
         raw_volatility = float(feat["ret1"].rolling(20).std().iloc[-2])
-        normalized_volatility = normalize_volatility(raw_volatility)
+        volatility_z_score = get_volatility_z_score(raw_volatility)
         
         s = score_stock(
             code, 
             code_to_name_map.get(code, code), 
             feat, 
             get_z_scores(feat),
-            normalized_news_score, 
-            normalized_volatility, 
+            news_z_score, 
+            volatility_z_score, 
             conf, 
-            market_regime=market_regime
+            market_regime=market_regime,
+            strategy=strategy # strategy 파라미터 전달
         )
         if s:
-            scored.append(RecoItem(code=s.code, name=s.name, score=s.score, weight=0.0, reason=s.reason, momentum=s.momentum, news_sentiment=news_summary))
+            raw_scored_stocks.append(s)
 
-    if not scored:
+    if not raw_scored_stocks:
         raise HTTPException(status_code=503, detail="Insufficient data for scoring")
+
+    # --- 5단계: 점수 스케일링 (0-100점 만점) ---
+    all_raw_scores = [s.score for s in raw_scored_stocks]
+    min_raw_score, max_raw_score = min(all_raw_scores), max(all_raw_scores)
+
+    def scale_to_100(score: float) -> int:
+        if max_raw_score > min_raw_score:
+            # 점수를 0-1 사이로 정규화한 후 100을 곱합니다.
+            # 하위 20%는 0~60점, 상위 80%는 60~100점에 분포하도록 조정하여 변별력을 높입니다.
+            normalized = (score - min_raw_score) / (max_raw_score - min_raw_score)
+            if normalized < 0.2:
+                return int(normalized / 0.2 * 60)
+            else:
+                return int(60 + (normalized - 0.2) / 0.8 * 40)
+        return 50 # 모든 점수가 동일할 경우 50점 부여
+
+    scored: List[RecoItem] = []
+    for s in raw_scored_stocks:
+        final_score = scale_to_100(s.score)
+        stars = calculate_stock_stars(final_score, market_regime)
+        news_summary = news_data_map.get(s.code) if with_news else None
+        scored.append(RecoItem(code=s.code, name=s.name, score=final_score, stars=stars, weight=0.0, reason=s.reason, momentum=s.momentum, news_sentiment=news_summary))
 
     scored.sort(key=lambda x: x.score, reverse=True)
     top = scored[:n]
@@ -222,7 +252,7 @@ async def recommend(request: Request, as_of: Optional[str] = None, n: int = 5, w
                 weight=item.weight,
                 reason=item.reason,
                 momentum=item.momentum,
-                news_sentiment=item.news_sentiment
+                news_sentiment=item.news_sentiment.model_dump() if item.news_sentiment and hasattr(item.news_sentiment, 'model_dump') else None
             )
             db.add(stock)
         db.commit()

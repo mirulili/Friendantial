@@ -23,13 +23,13 @@ class NewsSentimentDetail(BaseModel):
 
 class NewsSentiment(BaseModel):
     summary: str
-    stars: int
     details: List[NewsSentimentDetail]
 
 class RecoItem(BaseModel):
     code: str
     name: str
-    score: float
+    score: int # 0~100점 사이의 정수 점수
+    stars: int # 종목의 최종 추천 별점
     weight: float
     reason: str
     momentum: Dict[str, float]

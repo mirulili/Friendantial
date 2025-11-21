@@ -117,10 +117,10 @@ async def fetch_news_titles(client: httpx.AsyncClient, query: str, limit: int = 
         logging.warning(f"뉴스 수집 실패 (종목: {query}): {e}")
         return []
 
-def _stars_from_prediction(label: str, confidence: float, id2label: dict) -> tuple[int, str, int]:
-    """모델 예측 결과를 바탕으로 별점(1-5), 표시용 레이블, 감성 값(-1,0,1)을 반환합니다."""
+def _get_sentiment_details_from_prediction(label: str, confidence: float, id2label: dict) -> tuple[str, int]:
+    """모델 예측 결과를 바탕으로 표시용 레이블과 감성 값(-1,0,1)을 반환합니다."""
     if confidence < SENTIMENT_CONFIDENCE_THRESHOLD_NEUTRAL:
-        return 3, "중립", 0
+        return "중립", 0
 
     is_strong = confidence >= SENTIMENT_CONFIDENCE_THRESHOLD_STRONG
     
@@ -137,16 +137,14 @@ def _stars_from_prediction(label: str, confidence: float, id2label: dict) -> tup
     negative_labels = ["0", "negative"]
 
     if semantic_label in positive_labels:
-        stars = 5 if is_strong else 4
         display_label = "강력한 호재" if is_strong else "호재"
-        return stars, display_label, 1
+        return display_label, 1
     if semantic_label in negative_labels:
-        stars = 1 if is_strong else 2
         display_label = "강력한 악재" if is_strong else "악재"
-        return stars, display_label, -1
+        return display_label, -1
 
     # '1', 'neutral' 또는 예상치 못한 레이블은 모두 중립으로 처리
-    return 3, "중립", 0
+    return "중립", 0
 
 def analyze_news_sentiment(pipe: pipeline, headlines: List[str]) -> dict:
     if not headlines:
@@ -163,7 +161,7 @@ def analyze_news_sentiment(pipe: pipeline, headlines: List[str]) -> dict:
         label = pred.get("label", "neutral")
         confidence = float(pred.get("score", 0.0))
         
-        stars, display_label, sentiment_value = _stars_from_prediction(label, confidence, id2label)
+        display_label, sentiment_value = _get_sentiment_details_from_prediction(label, confidence, id2label)
 
         weight = math.exp(-SENTIMENT_NEWS_WEIGHT_DECAY_RATE * i)
         score_acc += sentiment_value * weight

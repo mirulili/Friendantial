@@ -25,6 +25,12 @@ DATA_GO_KR_API_KEY = os.getenv("DATA_GO_KR_API_KEY")
 
 # 데이터베이스 접속 URL
 DATABASE_URL = os.getenv("DATABASE_URL")
+# 사용할 LLM 제공자 (openai, gemini 등)
+LLM_PROVIDER="openai"
+
+# 사용할 LLM 모델 이름
+LLM_MODEL_NAME="gpt-4-turbo"
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 # Redis 접속 URL
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
@@ -46,3 +52,4 @@ SENTIMENT_NEWS_WEIGHT_DECAY_RATE = float(os.getenv("SENTIMENT_NEWS_WEIGHT_DECAY_
 # Naver API credentials
 NAVER_CLIENT_ID = os.getenv("NAVER_CLIENT_ID")
 NAVER_CLIENT_SECRET = os.getenv("NAVER_CLIENT_SECRET")
+

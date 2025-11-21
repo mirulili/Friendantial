@@ -18,10 +18,21 @@ async def get_news_sentiment_for_stock(request: Request, stock_name: str):
     """
     주어진 종목 이름(또는 코드)에 대한 최신 뉴스를 수집하고 감성 분석을 수행합니다.
     """
-    sentiment_pipe = request.app.state.sentiment_pipe
+    query_name = stock_name
+    # 입력이 '005930.KS'와 같은 코드 형식인지 확인
+    if stock_name.endswith((".KS", ".KQ")):
+        async with httpx.AsyncClient() as client:
+            try:
+                # app.state에 등록된 공통 유틸리티 함수를 사용하여 종목명을 가져옵니다.
+                stock_info = await request.app.state.lookup_stock_info(client, request.app.state.redis, stock_name)
+                if stock_info:
+                    query_name = stock_info.get("itmsNm", stock_name)
+            except Exception:
+                pass # 종목 정보를 찾지 못하면 원래 코드로 검색 시도
 
+    sentiment_pipe = request.app.state.sentiment_pipe
     async with httpx.AsyncClient() as client:
-        titles = await fetch_news_titles(client, stock_name, limit=NEWS_MAX)
+        titles = await fetch_news_titles(client, query_name, limit=NEWS_MAX)
 
     if not titles:
         return {"stock_name": stock_name, "summary": "뉴스를 찾을 수 없습니다.", "details": []}
