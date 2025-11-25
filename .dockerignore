@@ -3,16 +3,10 @@
 .gitignore
 
 # Docker
-Dockerfile
 .dockerignore
 
 # Python virtual environment and cache
 .venv/
 __pycache__/
 
-# Documentation and local development tools
-README.md
-Makefile
-Makefile.mk
-.idea/
 .vscode/

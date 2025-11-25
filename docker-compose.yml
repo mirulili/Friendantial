@@ -11,19 +11,28 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./src:/app/src
+      # 로컬의 app 폴더를 컨테이너 내부의 패키지 경로로 매핑
+      - ./app:/app/app
+      # 캐시 디렉토리 매핑 (로컬용)
       - ./.cache:/app/.cache
     networks:
       - friendantial-net
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   db:
     image: postgres:15
     container_name: friendantial-db
     env_file:
       - .env
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     volumes:
       - pgdata:/var/lib/postgresql/data
     networks:
@@ -32,6 +41,11 @@ services:
   redis:
     image: redis:7-alpine
     container_name: friendantial-redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     networks:
       - friendantial-net
 

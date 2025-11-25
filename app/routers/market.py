@@ -1,9 +1,9 @@
 from typing import Optional
 
-from fastapi import APIRouter, Request, HTTPException
 import httpx
+from fastapi import APIRouter, HTTPException, Request
 
-from app.market_data import fetch_ohlcv, _fetch_stock_info
+from app.services.market_data import _fetch_stock_info, fetch_ohlcv
 
 router = APIRouter(
     prefix="/market-data",
@@ -20,11 +20,19 @@ async def lookup_stock_info(request: Request, stock_code: str):
     redis_conn = request.app.state.redis
     async with httpx.AsyncClient() as client:
         stock_info = await _fetch_stock_info(client, redis_conn, stock_code)
-    
+
     if not stock_info:
-        raise HTTPException(status_code=404, detail=f"종목 정보를 찾을 수 없습니다: {stock_code}")
-    
-    return {"code": stock_code, "name": stock_info.get("itmsNm"), "market": stock_info.get("mrktCtg"), **stock_info}
+        raise HTTPException(
+            status_code=404, detail=f"종목 정보를 찾을 수 없습니다: {stock_code}"
+        )
+
+    return {
+        "code": stock_code,
+        "name": stock_info.get("itmsNm"),
+        "market": stock_info.get("mrktCtg"),
+        **stock_info,
+    }
+
 
 @router.get("/ohlcv/{stock_code}", summary="종목 시세(OHLCV) 조회")
 async def get_ohlcv_for_stock(
@@ -34,6 +42,8 @@ async def get_ohlcv_for_stock(
     end_date: Optional[str] = None,
 ):
     """주어진 종목 코드에 대한 OHLCV(시가, 고가, 저가, 종가, 거래량) 데이터를 반환합니다."""
-    data = await fetch_ohlcv(request, [stock_code], end_date=end_date, lookback_days=lookback_days)
+    data = await fetch_ohlcv(
+        request, [stock_code], end_date=end_date, lookback_days=lookback_days
+    )
     df = data.get(stock_code)
     return df.to_dict(orient="index") if df is not None and not df.empty else {}

@@ -1,13 +1,26 @@
 fastapi
 uvicorn[standard]
 numpy<2
-httpx # market_data.py에서 사용하므로 유지합니다.
-transformers
-torch --index-url https://download.pytorch.org/whl/cpu
+httpx
+transformers==4.39.0
+torch
 python-dotenv
-sentencepiece
+python-dotenv
+pandas
+dill
+xxhash
+fsspec[http]<=2025.9.0,>=2023.1.0
 
-# 데이터베이스 연동을 위한 라이브러리
+# 데이터베이스 연동
 SQLAlchemy
 psycopg2-binary
 redis
+
+# LLM
+openai
+google-generativeai
+
+# RAG
+chromadb
+sentence-transformers==2.7.0
+

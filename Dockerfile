@@ -2,7 +2,7 @@
 
 # --- Stage 1: Builder ---
 # Install dependencies into a virtual environment
-FROM python:3.10-slim as builder
+FROM python:3.11.9 as builder
 ARG DEBIAN_FRONTEND=noninteractive
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -16,13 +16,13 @@ ENV PATH="$VENV_PATH/bin:$PATH"
 
 COPY requirements.txt .
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple -r requirements.txt && \
     find $VENV_PATH -name "__pycache__" -type d -exec rm -rf {} +
 
 # --- Stage 2: Model Downloader ---
 # Download the HuggingFace model to be included in the final image
 FROM builder as downloader
-ARG SENTIMENT_MODEL_ID
+ARG SENTIMENT_MODEL_ID="snunlp/KR-FinBert-SC"
 ENV HF_HOME=/opt/hf_home
 
 RUN python -c "from transformers import pipeline; pipeline('sentiment-analysis', model='${SENTIMENT_MODEL_ID}')" && \
@@ -49,10 +49,12 @@ RUN useradd --create-home --shell /bin/bash appuser
 COPY --from=builder $VENV_PATH $VENV_PATH
 COPY --from=downloader $HF_HOME $HF_HOME
 
-# App
+# App Setup
 WORKDIR /app
-COPY --chown=appuser:appuser src/ .
+
+COPY --chown=appuser:appuser app app
 
 USER appuser
 EXPOSE 8000
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
