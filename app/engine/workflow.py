@@ -21,6 +21,10 @@ from .presentation import calculate_stock_stars, generate_friendly_reason, scale
 from .scoring import compute_features, score_stock
 
 
+from ..dependencies import get_http_client
+
+# ...
+
 async def recommend(
     request: Request,
     as_of: Optional[str] = None,
@@ -28,13 +32,14 @@ async def recommend(
     with_news: bool = True,
     strategy: str = "default",
     db: Session = Depends(get_db),
+    client: httpx.AsyncClient = Depends(get_http_client),
 ) -> RecoResponse:
     if as_of is None:
         as_of = datetime.now(TZ).date().isoformat()
 
     # 1. 유니버스 및 데이터 수집
     universe = await get_universe(
-        request, "KOSPI" if MARKET.upper() == "KS" else "KOSDAQ"
+        client, request, "KOSPI" if MARKET.upper() == "KS" else "KOSDAQ"
     )
     if not universe:
         raise HTTPException(
@@ -43,11 +48,11 @@ async def recommend(
 
     codes, names_list = zip(*universe)
     code_to_name_map = dict(zip(codes, names_list))
-    data = await fetch_ohlcv(request, list(codes), end_date=as_of, lookback_days=120)
+    data = await fetch_ohlcv(client, request, list(codes), end_date=as_of, lookback_days=120)
     conf = FeatureConf()
 
     # 2. 시장 상황 분석 (분리된 모듈 사용)
-    market_regime = await determine_market_regime(request, as_of)
+    market_regime = await determine_market_regime(client, request, as_of)
 
     # 3. 피쳐 계산 및 모멘텀 통계 산출
     features_map = {}
@@ -101,7 +106,8 @@ async def recommend(
     # 5. 뉴스 감성 분석
     news_data_map = {}
     if with_news:
-        async with httpx.AsyncClient() as client:
+        # async with httpx.AsyncClient() as client: -> Removed
+        if True: # Indentation placeholder
             all_titles = []
             batch_size = 5
             for i in range(0, len(pre_selected_codes), batch_size):

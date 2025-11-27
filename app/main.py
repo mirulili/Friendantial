@@ -4,6 +4,8 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
+import httpx
+import jinja2
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -16,7 +18,7 @@ from app.db.database import engine
 from app.db.db_models import Base
 from app.llm.llm_clients import GeminiChatClient  # 사용할 LLM 클라이언트들 임포트
 from app.llm.llm_clients import OpenAIChatClient
-from app.routers import (analysis, backtest, history, market, mcp, recommend,
+from app.routers import (backtest, basic_analysis, history, market, opinion,
                          reporting)
 from app.services.sentiment import sentiment_lifespan
 
@@ -30,11 +32,20 @@ async def lifespan(app: FastAPI):
 
     # Redis 연결 풀 생성
     app.state.redis = redis.from_url(REDIS_URL, encoding="utf-8", decode_responses=True)
+    app.state.tz = TZ
 
     # 공통 유틸리티 함수 등록
     from app.services.market_data import _fetch_stock_info
 
     app.state.lookup_stock_info = _fetch_stock_info
+
+    # Jinja2 템플릿 환경 설정
+    app.state.jinja_env = jinja2.Environment(
+        loader=jinja2.FileSystemLoader("app/prompts/templates")
+    )
+
+    # HTTP 클라이언트 생성
+    app.state.http_client = httpx.AsyncClient()
 
     # 환경 변수에 따라 LLM 클라이언트를 동적으로 선택
     llm_provider = os.getenv("LLM_PROVIDER", "openai").lower()
@@ -61,6 +72,7 @@ async def lifespan(app: FastAPI):
             yield
     finally:
         await app.state.redis.close()
+        await app.state.http_client.aclose()
         app.state.llm_client = None  # 클라이언트 정리
 
 
@@ -70,12 +82,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-app.include_router(analysis.router)
-app.include_router(recommend.router)
 app.include_router(market.router)
+app.include_router(basic_analysis.router)
 app.include_router(reporting.router)
+app.include_router(opinion.router)
 app.include_router(history.router)
-app.include_router(mcp.router)
 app.include_router(backtest.router)
 
 

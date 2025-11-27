@@ -3,7 +3,10 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 import pandas as pd
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
+
+from app.dependencies import get_http_client
+import httpx
 
 from app.engine.scoring import compute_features, score_stock
 from app.schemas.models import FeatureConf
@@ -18,6 +21,7 @@ async def backtest_strategy(
     target_date: str,
     strategy: str = "day_trader",
     codes: Optional[str] = Query(None, description="종목 코드 (예: 005930.KS)"),
+    client: httpx.AsyncClient = Depends(get_http_client),
 ):
     # 1. 종목 설정
     if codes:
@@ -29,7 +33,7 @@ async def backtest_strategy(
 
     # 2. 데이터 조회 (과거 시점)
     data = await fetch_ohlcv(
-        request, sample_codes, end_date=target_date, lookback_days=120
+        client, request, sample_codes, end_date=target_date, lookback_days=120
     )
 
     results = []
@@ -86,7 +90,7 @@ async def backtest_strategy(
                 datetime.strptime(target_date, "%Y-%m-%d") + timedelta(days=7)
             ).strftime("%Y-%m-%d")
             future_data = await fetch_ohlcv(
-                request, [code], end_date=future_date, lookback_days=10
+                client, request, [code], end_date=future_date, lookback_days=10
             )
 
             if not future_data[code].empty:

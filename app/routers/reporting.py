@@ -6,9 +6,10 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
+from app.dependencies import get_http_client
 from app.engine.scoring import compute_features
 from app.engine.workflow import recommend
-from app.routers.mcp import generate_text_with_persona
+from app.services.llm_service import generate_text_with_persona
 from app.schemas.models import FeatureConf
 from app.services.market_data import fetch_ohlcv
 from app.services.sentiment import analyze_news_sentiment, fetch_news_titles
@@ -25,12 +26,13 @@ async def create_recommendation_report(
     strategy: str = "default",
     persona: Optional[str] = None,
     db: Session = Depends(get_db),
+    client: httpx.AsyncClient = Depends(get_http_client),
 ):
     """/recommendations 로직을 사용하여 추천 데이터를 생성하고, LLM을 통해 자연스러운 요약 보고서를 생성합니다."""
     try:
         # 1. /recommendations 로직을 호출, 추천할 데이터 수집
         # API 파라미터로 받은 strategy를 recommend 함수에 전달
-        reco_response = await recommend(request=request, strategy=strategy, db=db)
+        reco_response = await recommend(request=request, strategy=strategy, db=db, client=client)
 
         # --- 페르소나 결정 로직: 쿼리 파라미터가 없으면 'friend'를 기본값으로 사용 ---
         persona_name = persona or "friend"
@@ -109,6 +111,7 @@ async def create_stock_report(
     request: Request,
     stock_code: str,
     persona: Optional[str] = None,
+    client: httpx.AsyncClient = Depends(get_http_client),
 ):
     """
     특정 종목 코드에 대한 심층 분석 보고서를 생성합니다.
@@ -122,7 +125,7 @@ async def create_stock_report(
     try:
         # --- 종목 정보 조회 (코드 -> 이름) ---
         stock_name = stock_code.split(".")[0]  # 기본값 설정
-        async with httpx.AsyncClient() as client:
+        if True: # Indentation placeholder
             try:
                 # app.state에 등록된 공통 유틸리티 함수를 사용하여 종목명을 가져옴
                 stock_info = await request.app.state.lookup_stock_info(
@@ -139,7 +142,7 @@ async def create_stock_report(
                 logging.error(f"종목 정보 조회 중 예상치 못한 오류 발생: {e}")
 
         # 1. 데이터 수집
-        ohlcv_data = await fetch_ohlcv(request, [stock_code], lookback_days=120)
+        ohlcv_data = await fetch_ohlcv(client, request, [stock_code], lookback_days=120)
         df = ohlcv_data.get(stock_code)
         if df is None or df.empty:
             raise HTTPException(
@@ -156,7 +159,7 @@ async def create_stock_report(
         mom60 = features["mom60"].iloc[-2]
         volatility = features["ret1"].rolling(20).std().iloc[-2]
 
-        async with httpx.AsyncClient() as client:
+        if True: # Indentation placeholder
             news_titles = await fetch_news_titles(client, stock_name, limit=3)
         news_analysis = analyze_news_sentiment(
             request.app.state.sentiment_pipe, news_titles

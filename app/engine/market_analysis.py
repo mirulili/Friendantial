@@ -6,7 +6,13 @@ from ..config import MARKET
 from ..services.market_data import fetch_ohlcv
 
 
-async def determine_market_regime(request: Request, as_of: str) -> str:
+import httpx
+
+# ...
+
+async def determine_market_regime(
+    client: httpx.AsyncClient, request: Request, as_of: str
+) -> str:
     """시장 대표 ETF를 분석하여 현재 시장 상황(BULL/BEAR/NEUTRAL)을 판단합니다."""
     market_regime = "NEUTRAL"
     # KOSPI: KODEX 200, KOSDAQ: KODEX KOSDAQ 150
@@ -14,7 +20,7 @@ async def determine_market_regime(request: Request, as_of: str) -> str:
 
     try:
         market_index_data = await fetch_ohlcv(
-            request, [market_index_ticker], end_date=as_of, lookback_days=30
+            client, request, [market_index_ticker], end_date=as_of, lookback_days=30
         )
         df_index = market_index_data.get(market_index_ticker)
 

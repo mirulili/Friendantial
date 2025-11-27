@@ -40,7 +40,13 @@ def parse_env_universe() -> List[Tuple[str, str]]:
     return [(sym, re.sub(r"\.[A-Z]{2}$", "", sym)) for sym in ENV_TICKERS]
 
 
-async def get_universe(request: Request, market_code: str) -> List[Tuple[str, str]]:
+import httpx
+
+# ...
+
+async def get_universe(
+    client: httpx.AsyncClient, request: Request, market_code: str
+) -> List[Tuple[str, str]]:
     # 1. 환경 변수에 TICKERS가 지정되어 있으면 최우선으로 사용
     env_uni = parse_env_universe()
     if env_uni:
@@ -51,7 +57,7 @@ async def get_universe(request: Request, market_code: str) -> List[Tuple[str, st
 
     # 2. 환경 변수가 없으면, 공공데이터 API를 사용하여 유니버스를 구성
     try:
-        universe = await get_universe_from_market_data(request, market_code)
+        universe = await get_universe_from_market_data(client, request, market_code)
         if universe:
             return universe
     except Exception as e:

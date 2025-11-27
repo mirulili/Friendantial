@@ -285,9 +285,9 @@ async def get_universe_from_market_data(
                 # yfinance 형식에 맞게 접미사 추가
                 universe.append((f"{code}{suffix}", name))
 
-    msg = (
-        f"총 {len(daily_prices)}개 종목 중 거래대금 및 시장 기준을 만족하는 "
-        f"{len(universe)}개 종목으로 유니버스를 확정합니다."
-    )
-    logging.info(msg)
-    return universe
+        msg = (
+            f"총 {len(daily_prices)}개 종목 중 거래대금 및 시장 기준을 만족하는 "
+            f"{len(universe)}개 종목으로 유니버스를 확정합니다."
+        )
+        logging.info(msg)
+        return universe
