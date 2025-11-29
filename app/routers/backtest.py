@@ -1,15 +1,17 @@
+# app/routers/backtest.py
+
 import logging
 from datetime import datetime, timedelta
 from typing import Optional
 
-import pandas as pd
-from fastapi import APIRouter, Depends, Query, Request
-
-from app.dependencies import get_http_client
 import httpx
+import redis.asyncio as redis
+from fastapi import APIRouter, Depends, Query
 
-from app.engine.scoring import compute_features, score_stock
-from app.schemas.models import FeatureConf
+from app.dependencies import get_http_client, get_redis_connection
+from app.routers.basic_analysis import get_analysis_service
+from app.schemas.enums import StrategyEnum
+from app.services.analysis import AnalysisService
 from app.services.market_data import fetch_ohlcv
 
 router = APIRouter(prefix="/backtest", tags=["backtest"])
@@ -17,114 +19,77 @@ router = APIRouter(prefix="/backtest", tags=["backtest"])
 
 @router.get("/simulate")
 async def backtest_strategy(
-    request: Request,
-    target_date: str,
-    strategy: str = "day_trader",
+    target_date: str = Query(..., description="백테스트 기준일 (YYYY-MM-DD)"),
+    strategy: StrategyEnum = Query(StrategyEnum.DAY_TRADER, description="전략 선택"),
     codes: Optional[str] = Query(None, description="종목 코드 (예: 005930.KS)"),
+    analysis_service: AnalysisService = Depends(get_analysis_service),
+    # 백테스트 수익률 계산에 필요한 의존성만 남김
     client: httpx.AsyncClient = Depends(get_http_client),
+    redis_conn: redis.Redis = Depends(get_redis_connection),
 ):
-    # 1. 종목 설정
+    # 1. 분석 대상 종목을 설정합니다. (입력이 없으면 전체 유니버스 사용)
     if codes:
-        sample_codes = [c.strip() for c in codes.split(",") if c.strip()]
+        universe_codes = [c.strip() for c in codes.split(",") if c.strip()]
     else:
-        sample_codes = ["005930.KS", "000660.KS", "005380.KS", "035420.KS", "005935.KS"]
-
-    logging.info(f"Backtesting on {target_date} for {sample_codes}")
-
-    # 2. 데이터 조회 (과거 시점)
-    data = await fetch_ohlcv(
-        client, request, sample_codes, end_date=target_date, lookback_days=120
-    )
-
-    results = []
-    conf = FeatureConf()
-
-    for code, df in data.items():
-        if df.empty or len(df) < 30:
-            continue
-
-        # 3. 지표 계산
-        features = compute_features(df, conf)
-
-        # --- Self-Z-Score 계산 ---
-        # 시장 전체 데이터가 없으므로, 해당 종목의 과거(120일) 데이터와 비교하여 Z-Score 산출
-        z_scores = {}
-        for win in [conf.mom_short, conf.mom_med, conf.mom_long]:
-            col = f"mom{win}"
-            if col in features.columns:
-                # 최근 120일치 모멘텀의 평균과 표준편차 계산
-                series = features[col].dropna()
-                if not series.empty:
-                    mean = series.mean()
-                    std = series.std()
-                    current_val = series.iloc[
-                        -2
-                    ]  # 어제 종가 기준 (오늘 시초가 매수 가정)
-
-                    # 표준편차가 0이 아니면 Z-Score 계산
-                    if std > 0:
-                        z_scores[col] = (current_val - mean) / std
-                    else:
-                        z_scores[col] = 0.0
-
-        # 4. 점수 산출
-        score_obj = score_stock(
-            code,
-            code,
-            features,
-            z_scores,
-            0,
-            0,
-            conf,
-            strategy=strategy,
+        universe_codes = (
+            None  # None으로 전달하여 서비스가 전체 유니버스를 사용하도록 합니다.
         )
 
-        if score_obj:
-            # 5. 전략 판단 (기준 점수)
-            # Self-Z-Score는 변동폭이 크므로 기준을 0점으로 설정
-            buy_threshold = 0.0
-            decision = "매수" if score_obj.score > buy_threshold else "관망(매수X)"
+    logging.info(f"Backtesting on {target_date} for {universe_codes or 'ALL'}")
 
-            # 6. 미래 수익률 확인 (7일 뒤)
-            future_date = (
-                datetime.strptime(target_date, "%Y-%m-%d") + timedelta(days=7)
-            ).strftime("%Y-%m-%d")
-            future_data = await fetch_ohlcv(
-                client, request, [code], end_date=future_date, lookback_days=10
-            )
+    # 2. 중앙 분석 워크플로우 실행
+    reco_response = await analysis_service.run_backtest_recommendations(
+        strategy=strategy, as_of=target_date, universe_codes=universe_codes
+    )
 
-            if not future_data[code].empty:
-                try:
-                    buy_price = features["close"].iloc[-1]
-                    sell_price = future_data[code]["close"].iloc[-1]
-                    profit = (sell_price - buy_price) / buy_price
+    recommended_stocks = reco_response.candidates
+    if not recommended_stocks:
+        return {"message": "해당 날짜에 추천된 종목이 없습니다.", "backtest_result": []}
 
-                    rsi_val = score_obj.momentum.get("rsi", 0)
+    results = []
+    # 3. 추천일로부터 7일 후의 수익률을 확인합니다.
+    future_date = (
+        datetime.strptime(target_date, "%Y-%m-%d") + timedelta(days=7)
+    ).strftime("%Y-%m-%d")
 
-                    results.append(
-                        {
-                            "code": code,
-                            "date": target_date,
-                            "score": round(score_obj.score, 2),
-                            "decision": decision,
-                            "rsi": round(rsi_val, 1),
-                            "return": f"{profit:.2%}",
-                            "result_msg": (
-                                "성공(수익)"
-                                if decision == "매수" and profit > 0
-                                else (
-                                    "실패(손실)"
-                                    if decision == "매수" and profit < 0
-                                    else (
-                                        "성공(손실회피)"
-                                        if decision != "매수" and profit < 0
-                                        else "아쉬움(기회비용)"
-                                    )
-                                )
-                            ),
-                        }
-                    )
-                except IndexError:
-                    pass
+    # 모든 추천 종목의 미래 데이터를 한 번에 조회
+    future_data_map = await fetch_ohlcv(
+        client,
+        redis_conn,
+        [s.code for s in recommended_stocks],
+        end_date=future_date,
+        lookback_days=10,
+    )
+
+    for reco_item in recommended_stocks:
+        buy_price = reco_item.price
+        future_df = future_data_map.get(reco_item.code)
+
+        if future_df is None or future_df.empty:
+            profit = "N/A"
+            result_msg = "미래 데이터 없음"
+        else:
+            try:
+                sell_price = future_df["close"].iloc[-1]
+                profit_pct = (
+                    (sell_price - buy_price) / buy_price if buy_price > 0 else 0
+                )
+                profit = f"{profit_pct:.2%}"
+                result_msg = "성공(수익)" if profit_pct > 0 else "실패(손실)"
+            except (IndexError, ZeroDivisionError):
+                profit = "N/A"
+                result_msg = "수익률 계산 실패"
+
+        results.append(
+            {
+                "code": reco_item.code,
+                "name": reco_item.name,
+                "date": target_date,
+                "score": round(reco_item.score, 2),
+                "decision": "매수 추천",
+                "return": profit,
+                "result_msg": result_msg,
+            }
+        )
 
     return {"backtest_result": results}

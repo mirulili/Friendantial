@@ -1,3 +1,5 @@
+# app/main.py
+
 from __future__ import annotations
 
 import logging
@@ -6,52 +8,52 @@ from contextlib import asynccontextmanager
 
 import httpx
 import jinja2
-from dotenv import load_dotenv
-
-load_dotenv()
-
 import redis.asyncio as redis
+from dotenv import load_dotenv
 from fastapi import FastAPI
 
 from app.config import REDIS_URL, TZ, logging_config
-from app.db.database import engine
+from app.db.database import engine, get_db
 from app.db.db_models import Base
 from app.llm.llm_clients import GeminiChatClient  # 사용할 LLM 클라이언트들 임포트
 from app.llm.llm_clients import OpenAIChatClient
+from app.llm.rag import rag_engine
 from app.routers import (backtest, basic_analysis, history, market, opinion,
                          reporting)
+from app.services.analysis import AnalysisService
 from app.services.sentiment import sentiment_lifespan
 
+load_dotenv()
 logging.basicConfig(**logging_config)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 데이터베이스 테이블 생성
+    # 애플리케이션 시작 시 데이터베이스 테이블을 생성합니다.
     Base.metadata.create_all(bind=engine)
 
-    # Redis 연결 풀 생성
+    # Redis 연결 풀을 생성하여 애플리케이션 상태에 저장합니다.
     app.state.redis = redis.from_url(REDIS_URL, encoding="utf-8", decode_responses=True)
     app.state.tz = TZ
 
-    # 공통 유틸리티 함수 등록
+    # 자주 사용되는 유틸리티 함수를 애플리케이션 상태에 등록합니다.
     from app.services.market_data import _fetch_stock_info
 
     app.state.lookup_stock_info = _fetch_stock_info
 
-    # Jinja2 템플릿 환경 설정
+    # LLM 프롬프트에 사용될 Jinja2 템플릿 환경을 설정합니다.
     app.state.jinja_env = jinja2.Environment(
-        loader=jinja2.FileSystemLoader("app/prompts/templates")
+        loader=jinja2.FileSystemLoader("app/llm/templates")
     )
 
-    # HTTP 클라이언트 생성
+    # 외부 API 호출을 위한 HTTP 클라이언트를 생성합니다.
     app.state.http_client = httpx.AsyncClient()
 
-    # 환경 변수에 따라 LLM 클라이언트를 동적으로 선택
+    # 환경 변수(LLM_PROVIDER)에 따라 사용할 LLM 클라이언트를 동적으로 선택합니다.
     llm_provider = os.getenv("LLM_PROVIDER", "openai").lower()
     app.state.llm_client = None
 
-    logging.info(f"선택된 LLM 제공자: {llm_provider}")
+    logging.info(f"선택된 LLM 공급자: {llm_provider}")
 
     if llm_provider == "openai":
         api_key = os.getenv("OPENAI_API_KEY")
@@ -67,18 +69,38 @@ async def lifespan(app: FastAPI):
             "LLM 클라이언트가 초기화되지 않았습니다. LLM_PROVIDER 및 해당 API 키 환경 변수를 확인하세요."
         )
 
+    # RAG 엔진을 애플리케이션 상태에 추가합니다.
+    app.state.rag_engine = rag_engine
+
+    # lifespan 동안 사용할 DB 세션을 생성합니다.
+    db_session_generator = get_db()
+    db = next(db_session_generator)
+
     try:
+        # AnalysisService를 애플리케이션 상태에 추가합니다.
+        app.state.analysis_service = AnalysisService(
+            sentiment_pipe=None,  # sentiment_lifespan에서 채워짐
+            http_client=app.state.http_client,
+            db=db,
+            redis_conn=app.state.redis,
+        )
+
         async with sentiment_lifespan(app):
             yield
+    # 애플리케이션 종료 시 리소스를 정리합니다.
     finally:
+        next(db_session_generator, None)  # DB 세션 정리
         await app.state.redis.close()
         await app.state.http_client.aclose()
+        if app.state.llm_client:
+            await app.state.llm_client.close()
+
         app.state.llm_client = None  # 클라이언트 정리
 
 
 app = FastAPI(
-    title="Friendantial (FDR + NewsRSS + Multilingual Sentiment)",
-    version="0.4.0",
+    title="Friendantial",
+    version="1.0",
     lifespan=lifespan,
 )
 

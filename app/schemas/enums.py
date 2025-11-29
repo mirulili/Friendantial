@@ -1,3 +1,5 @@
+# app/schemas/enums.py
+
 from enum import Enum
 
 
@@ -7,6 +9,5 @@ class PersonaEnum(str, Enum):
 
 
 class StrategyEnum(str, Enum):
-    DEFAULT = "default"
     DAY_TRADER = "day_trader"
-    LONG_TERM = "long_term"
+    LONG_TERM = "long_term_trader"

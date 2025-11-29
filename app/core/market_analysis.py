@@ -1,17 +1,17 @@
+# app/core/market_analysis.py
+
 import logging
 
-from fastapi import Request
+import httpx
+import redis.asyncio as redis
 
-from ..config import MARKET
+from app.config import MARKET
+
 from ..services.market_data import fetch_ohlcv
 
 
-import httpx
-
-# ...
-
 async def determine_market_regime(
-    client: httpx.AsyncClient, request: Request, as_of: str
+    client: httpx.AsyncClient, redis_conn: redis.Redis, as_of: str
 ) -> str:
     """시장 대표 ETF를 분석하여 현재 시장 상황(BULL/BEAR/NEUTRAL)을 판단합니다."""
     market_regime = "NEUTRAL"
@@ -20,7 +20,7 @@ async def determine_market_regime(
 
     try:
         market_index_data = await fetch_ohlcv(
-            client, request, [market_index_ticker], end_date=as_of, lookback_days=30
+            client, redis_conn, [market_index_ticker], end_date=as_of, lookback_days=30
         )
         df_index = market_index_data.get(market_index_ticker)
 

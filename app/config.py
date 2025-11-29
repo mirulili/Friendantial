@@ -1,6 +1,12 @@
+# app/config.py
+
 import os
 from datetime import timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from dotenv import load_dotenv
+
+load_dotenv()
 
 logging_config = {
     "level": os.getenv("LOG_LEVEL", "INFO"),
@@ -14,10 +20,11 @@ except ZoneInfoNotFoundError:
 
     TZ = timezone(timedelta(hours=9))
 
+# 분석할 시장 (KS: KOSPI, KQ: KOSDAQ)
 MARKET = os.getenv("MARKET", "KS")
 NEWS_MAX = int(os.getenv("NEWS_MAX", "3"))
 
-# 감성 분석을 위해 미세 조정된 snunlp/KR-FinBert-SC를 사용
+# 감성 분석에 사용할 HuggingFace 모델 ID
 SENTIMENT_MODEL_ID = os.getenv("SENTIMENT_MODEL", "snunlp/KR-FinBert-SC")
 
 # 공공데이터포털 API 서비스 키
@@ -27,7 +34,7 @@ DATA_GO_KR_API_KEY = os.getenv("DATA_GO_KR_API_KEY")
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 # 사용할 LLM 모델 이름
-LLM_MODEL_NAME = "gpt-4-turbo"
+LLM_MODEL_NAME = os.getenv("LLM_MODEL_NAME", "gpt-4-turbo")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 # Redis 접속 URL

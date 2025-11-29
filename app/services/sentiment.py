@@ -1,3 +1,6 @@
+# app/services/sentiment.py
+
+import asyncio
 import logging
 import math
 import re
@@ -56,25 +59,49 @@ NAVER_NEWS_OIDS = dict(
 
 @asynccontextmanager
 async def sentiment_lifespan(app):
-    """FastAPI lifespan 이벤트 핸들러: 모델 로딩 및 정리"""
-    logging.info("Sentiment pipeline 초기화를 시작합니다...")
-    app.state.sentiment_pipe = None
-    try:
-        tok = AutoTokenizer.from_pretrained(SENTIMENT_MODEL_ID)
-        mdl = AutoModelForSequenceClassification.from_pretrained(
-            SENTIMENT_MODEL_ID, use_safetensors=True
-        )
+    """FastAPI lifespan 이벤트 핸들러로, 애플리케이션 시작 시 감성 분석 모델을 비동기적으로 로드합니다."""
+    logging.info("Sentiment pipeline 초기화 작업을 시작합니다 (백그라운드)...")
 
-        app.state.sentiment_pipe = pipeline(
-            "sentiment-analysis", model=mdl, tokenizer=tok, device=-1
-        )
-        logging.info("Sentiment pipeline 준비 완료: %s", SENTIMENT_MODEL_ID)
-    except Exception as e:
-        logging.error("Sentiment pipeline 초기화 실패: %s", e)
+    # 1. 일단 빈 상태로 시작 (서버 부팅 차단 방지)
+    app.state.sentiment_pipe = None
+
+    # 2. 실제 로딩을 수행할 내부 비동기 함수 정의
+    async def load_model_background():
+        try:
+            # CPU를 많이 쓰는 작업을 별도 스레드에서 실행하여 이벤트 루프 차단 방지
+            logging.info("모델 파일 로딩 중... (서버는 이미 실행됨)")
+
+            # 토크나이저와 모델 로드 (동기 함수이므로 to_thread 사용)
+            tok, mdl = await asyncio.to_thread(
+                lambda: (
+                    AutoTokenizer.from_pretrained(SENTIMENT_MODEL_ID),
+                    AutoModelForSequenceClassification.from_pretrained(
+                        SENTIMENT_MODEL_ID, use_safetensors=True
+                    ),
+                )
+            )
+
+            # 파이프라인 생성
+            pipe = await asyncio.to_thread(
+                lambda: pipeline(
+                    "sentiment-analysis", model=mdl, tokenizer=tok, device=-1
+                )
+            )
+            # app.state에 직접 파이프라인 설정
+            app.state.analysis_service.sentiment_pipe = pipe
+            app.state.sentiment_pipe = pipe
+            logging.info(f"Sentiment pipeline 준비 완료: {SENTIMENT_MODEL_ID}")
+
+        except Exception as e:
+            logging.error(f"Sentiment pipeline 초기화 실패: {e}")
+
+    # 3. 백그라운드 태스크로 실행! (기다리지 않고 넘어감)
+    asyncio.create_task(load_model_background())
 
     yield
 
     logging.info("Sentiment pipeline을 정리합니다.")
+    app.state.analysis_service.sentiment_pipe = None
     app.state.sentiment_pipe = None
 
 
@@ -94,14 +121,13 @@ async def fetch_news_titles(
     # 해결: "증권", "경제"와 같은 키워드를 추가하여 금융/경제 관련 뉴스의 우선순위를 높임
     search_query = f"{query} 증권 경제"
     encoded_query = quote_plus(search_query)
-    url = f"https://openapi.naver.com/v1/search/news.xml?query={encoded_query}&display={limit}&start=1&sort=sim"
+    url = f"https://openapi.naver.com/v1/search/news.xml?query={encoded_query}&display={limit}&start=1&sort=sim"  # sim: 정확도순
     headers = {
-        "X-Naver-Client-Id": NAVER_CLIENT_ID,
         "X-Naver-Client-Id": NAVER_CLIENT_ID,
         "X-Naver-Client-Secret": NAVER_CLIENT_SECRET,
     }
     try:
-        r = await client.get(url, headers=headers, timeout=6.0)
+        r = await client.get(url, headers=headers, timeout=10.0)
         if r.status_code != 200 or not r.text:
             return []
         titles: List[str] = []
@@ -128,7 +154,7 @@ async def fetch_news_titles(
                     try:
                         hostname = urlparse(original_link_node.text).hostname
                         if hostname:
-                            # 'www.google.com' -> 'google', 'm.hankooki.com' -> 'hankooki'
+                            # 'm.hankooki.com' -> 'hankooki'
                             publisher = re.sub(
                                 r"^(www|m)\.|\.(com|co\.kr|kr|net|org)$", "", hostname
                             ).strip()
@@ -155,7 +181,9 @@ def _get_sentiment_details_from_prediction(
     label: str, confidence: float, id2label: dict
 ) -> tuple[str, int]:
     """모델 예측 결과를 바탕으로 표시용 레이블과 감성 값(-1,0,1)을 반환합니다."""
-    if confidence < SENTIMENT_CONFIDENCE_THRESHOLD_NEUTRAL:
+    if (
+        confidence < SENTIMENT_CONFIDENCE_THRESHOLD_NEUTRAL
+    ):  # 신뢰도가 낮으면 중립으로 처리
         return "중립", 0
 
     is_strong = confidence >= SENTIMENT_CONFIDENCE_THRESHOLD_STRONG
@@ -184,19 +212,18 @@ def _get_sentiment_details_from_prediction(
 
 
 def analyze_news_sentiment(pipe: pipeline, headlines: List[str]) -> dict:
+    """주어진 뉴스 제목 리스트에 대해 감성 분석을 수행하고, 종합 점수와 개별 분석 결과를 반환합니다."""
     if not headlines:
         return {
             "enabled": False,
             "summary": "no headlines",
             "details": [],
-            "score": 0.0,
         }
     if not pipe:
         return {
             "enabled": False,
             "summary": "model not available",
             "details": [],
-            "score": 0.0,
         }
 
     details = []
@@ -214,6 +241,7 @@ def analyze_news_sentiment(pipe: pipeline, headlines: List[str]) -> dict:
             label, confidence, id2label
         )
 
+        # 최신 뉴스에 더 높은 가중치를 부여하기 위해 지수 감쇠(exponential decay)를 적용합니다.
         weight = math.exp(-SENTIMENT_NEWS_WEIGHT_DECAY_RATE * i)
         score_acc += sentiment_value * weight
 
@@ -221,11 +249,9 @@ def analyze_news_sentiment(pipe: pipeline, headlines: List[str]) -> dict:
             {"title": title, "label": display_label, "confidence": round(confidence, 3)}
         )
 
-    final_score = score_acc
     summary = f"최근 뉴스 {len(details)}건 분석 완료"
     return {
         "enabled": True,
         "summary": summary,
         "details": details,
-        "score": final_score,
     }

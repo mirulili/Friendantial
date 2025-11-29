@@ -1,3 +1,5 @@
+# app/services/market_data.py
+
 import asyncio
 import json
 import logging
@@ -7,19 +9,19 @@ from typing import Dict, List, Optional, Tuple
 import httpx
 import pandas as pd
 import redis.asyncio as redis
-from fastapi import HTTPException, Request, status
+from fastapi import HTTPException, status
 
 from ..config import DATA_GO_KR_API_KEY, TZ, UNIVERSE_MIN_TURNOVER_WON
 
 
 async def fetch_ohlcv(
     client: httpx.AsyncClient,
-    request: Request,
+    redis_conn: redis.Redis,
     codes: List[str],
     end_date: Optional[str] = None,
     lookback_days: int = 120,
 ) -> Dict[str, pd.DataFrame]:
-    """공공데이터포털 API를 사용하여 여러 종목의 OHLCV 데이터를 비동기적으로 가져옵니다."""
+    """공공데이터포털 API를 사용하여 여러 종목의 OHLCV 데이터를 비동기적으로 가져옵니다. 결과는 종목 코드별 데이터프레임 딕셔너리로 반환됩니다."""
     if end_date is None:
         end_date = datetime.now(TZ).date().isoformat()
     try:
@@ -42,9 +44,7 @@ async def fetch_ohlcv(
         start_dt + timedelta(days=i) for i in range((end_dt - start_dt).days + 1)
     ]
     all_rows = []
-    redis_conn = request.app.state.redis
 
-    # async with httpx.AsyncClient() as client: -> Removed, use passed client
     tasks = []
     for date in dates_to_fetch:
         # 주말은 API 호출에서 제외
@@ -64,12 +64,12 @@ async def fetch_ohlcv(
         return {code: pd.DataFrame() for code in codes}
 
     full_df = pd.DataFrame(all_rows)
-    # API 응답의 숫자 필드는 문자열이므로 숫자 형태로 변환
+    # API 응답의 숫자 필드는 문자열이므로 숫자 형태로 변환합니다.
     numeric_cols = ["clpr", "hipr", "lopr", "mkp", "trqu", "trPrc"]
     for col in numeric_cols:
         full_df[col] = pd.to_numeric(full_df[col], errors="coerce")
 
-    # yfinance 티커 형식('######.KS')을 공공데이터포털 형식('######')으로 미리 변환
+    # yfinance 티커 형식('######.KS')을 공공데이터포털 형식('######')으로 미리 변환합니다.
     code_mapping = {code: code.split(".")[0] for code in codes}
 
     out: Dict[str, pd.DataFrame] = {}
@@ -105,10 +105,10 @@ async def fetch_ohlcv(
 async def _fetch_daily_prices(
     client: httpx.AsyncClient, redis_conn: redis.Redis, date: datetime.date
 ) -> List[Dict]:
-    """특정 날짜의 모든 종목 시세 데이터를 가져옵니다."""
+    """특정 날짜의 모든 종목 시세 데이터를 가져옵니다. 과거 데이터는 Redis에 캐시하여 사용합니다."""
     cache_key = f"market-data:{date.strftime('%Y%m%d')}"
 
-    # 당일 데이터는 변동 가능성이 있으므로 캐시하지 않고, 과거 데이터만 캐시를 확인
+    # 당일 데이터는 변동 가능성이 있으므로 캐시하지 않고, 과거 데이터만 캐시를 확인합니다.
     is_past_date = date < datetime.now(TZ).date()
 
     if is_past_date:
@@ -148,7 +148,7 @@ async def _fetch_daily_prices(
 
             all_items.extend(items)
 
-            # 마지막 페이지인지 확인
+            # 마지막 페이지인지 확인하여 모든 데이터를 가져옵니다.
             total_count = int(
                 data.get("response", {}).get("body", {}).get("totalCount", 0)
             )
@@ -156,18 +156,18 @@ async def _fetch_daily_prices(
                 break
 
             page_no += 1
-            await asyncio.sleep(0.1)  # 짧은 딜레이로 API 서버 부하 감소
+            await asyncio.sleep(0.1)  # API 서버 부하 감소를 위해 짧은 지연을 둡니다.
 
         except Exception as e:
             logging.error(
                 "공공데이터 API 호출 실패 (date: %s, page: %s): %s", date, page_no, e
             )
-            # 한 페이지 실패 시, 현재까지 수집된 데이터만 반환
+            # 한 페이지라도 실패하면, 현재까지 수집된 데이터만 반환하고 중단합니다.
             break
 
     if is_past_date and all_items:
         try:
-            # 과거 데이터는 7일간 캐시
+            # 과거 데이터는 7일간 캐시합니다.
             await redis_conn.set(
                 cache_key,
                 json.dumps(all_items),
@@ -182,7 +182,7 @@ async def _fetch_daily_prices(
 async def _fetch_stock_info(
     client: httpx.AsyncClient, redis_conn: redis.Redis, stock_code: str
 ) -> Optional[Dict]:
-    """특정 종목의 최신 정보를 공공데이터 API를 통해 가져옵니다. 결과는 1일간 캐시됩니다."""
+    """특정 종목의 최신 정보를 가져옵니다. 결과는 1일간 캐시하여 API 호출을 최소화합니다."""
     clean_code = stock_code.split(".")[0]
     cache_key = f"stock-info:{clean_code}"
 
@@ -214,24 +214,21 @@ async def _fetch_stock_info(
 
 
 async def get_stock_name_from_code(
-    request: Request, client: httpx.AsyncClient, stock_code: str
+    redis_conn: redis.Redis, client: httpx.AsyncClient, stock_code: str
 ) -> str:
     """
-    종목 코드를 사용하여 종목명을 조회합니다. 조회 실패 시 종목 코드를 반환합니다.
-    주입된 httpx.AsyncClient를 사용합니다.
+    종목 코드를 사용하여 종목명을 조회합니다.
+    조회 실패 시 종목 코드를 그대로 반환합니다.
     """
     # 기본값은 종목 코드 자체
     stock_name = stock_code
-    # 입력이 '005930.KS'와 같은 코드 형식인지 확인
+    # 입력이 '005930.KS'와 같은 코드 형식인지 확인합니다.
     if "." in stock_code:
         try:
-            # app.state에 등록된 공통 유틸리티 함수를 사용
-            if hasattr(request.app.state, "lookup_stock_info"):
-                stock_info = await request.app.state.lookup_stock_info(
-                    client, request.app.state.redis, stock_code
-                )
-                if stock_info:
-                    stock_name = stock_info.get("itmsNm", stock_code)
+            # 로컬 헬퍼 함수를 직접 호출
+            stock_info = await _fetch_stock_info(client, redis_conn, stock_code)
+            if stock_info:
+                stock_name = stock_info.get("itmsNm", stock_code)
         except Exception as e:
             logging.warning(
                 f"종목 정보 조회 실패({stock_code}): {e}. 코드로 계속 진행합니다."
@@ -242,7 +239,7 @@ async def get_stock_name_from_code(
 async def get_latest_daily_prices(
     client: httpx.AsyncClient, redis_conn: redis.Redis
 ) -> List[Dict]:
-    """최근 5일 중 가장 최신 거래일의 전체 시세 데이터를 반환합니다."""
+    """최근 5일 중 가장 최신 거래일의 전체 시세 데이터를 찾아 반환합니다."""
     for i in range(5):
         date_to_check = datetime.now(TZ).date() - timedelta(days=i)
         if date_to_check.weekday() >= 5:  # 주말 제외
@@ -256,13 +253,11 @@ async def get_latest_daily_prices(
 
 
 async def get_universe_from_market_data(
-    client: httpx.AsyncClient, request: Request, market_code: str
+    client: httpx.AsyncClient, redis_conn: redis.Redis, market_code: str
 ) -> List[Tuple[str, str]]:
     """
-    공공데이터포털 API를 통해 조회한 최신 시장 데이터를 기반으로 유니버스를 생성합니다.
+    최신 시장 데이터를 기반으로 거래대금과 시장 구분에 따라 투자 유니버스를 생성합니다.
     """
-    redis_conn = request.app.state.redis
-    # async with httpx.AsyncClient() as client: -> Removed
     daily_prices = await get_latest_daily_prices(client, redis_conn)
 
     if not daily_prices:
@@ -282,7 +277,7 @@ async def get_universe_from_market_data(
             code = item.get("srtnCd")
             name = item.get("itmsNm")
             if code and name:
-                # yfinance 형식에 맞게 접미사 추가
+                # yfinance 형식에 맞게 접미사를 추가합니다.
                 universe.append((f"{code}{suffix}", name))
 
     msg = (

@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   api:
     build:
@@ -8,6 +6,10 @@ services:
     container_name: friendantial-api
     env_file:
       - .env
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      - REDIS_URL=redis://redis:6379/0
+      - API_URL=http://api:8000
     ports:
       - "8000:8000"
     volumes:
@@ -46,6 +48,20 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - friendantial-net
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend  # 아래에서 만들 파일
+    container_name: friendantial-frontend
+    ports:
+      - "8501:8501"  # 브라우저에서 localhost:8501로 접속
+    environment:
+      - API_URL=http://api:8000  # 내부 Docker 네트워크에서 API 컨테이너 주소
+    depends_on:
+      - api
     networks:
       - friendantial-net
 

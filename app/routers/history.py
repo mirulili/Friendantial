@@ -1,12 +1,32 @@
+# app/routers/history.py
+
 from datetime import date
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session, joinedload
 
 from ..db import db_models
 from ..db.database import get_db
-from ..schemas import models
+
+
+class RecommendedStockHistoryItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    name: str
+    code: str
+    score: float
+    reason: Optional[str] = None
+    momentum: Optional[Any] = None
+
+
+class RecommendationRunHistoryItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    as_of: date
+    stocks: List[RecommendedStockHistoryItem]
+
 
 router = APIRouter(
     prefix="/history",
@@ -14,9 +34,7 @@ router = APIRouter(
 )
 
 
-@router.get(
-    "/recommendations", response_model=List[models.RecommendationRunHistoryItem]
-)
+@router.get("/recommendations", response_model=List[RecommendationRunHistoryItem])
 def get_recommendation_history(
     db: Session = Depends(get_db),
     start_date: Optional[date] = Query(None, description="조회 시작일(YYYY-MM-DD)"),

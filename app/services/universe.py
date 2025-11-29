@@ -1,9 +1,12 @@
+# app/services/universe.py
+
 import logging
 import os
 import re
 from typing import List, Tuple
 
-from fastapi import Request
+import httpx
+import redis
 
 from .market_data import get_universe_from_market_data
 
@@ -35,18 +38,16 @@ DEFAULT_UNIVERSE: List[Tuple[str, str]] = [
 
 
 def parse_env_universe() -> List[Tuple[str, str]]:
-    if not ENV_TICKERS:
-        return []  # 환경 변수가 없으면 빈 리스트 반환
+    """환경 변수(TICKERS)에 설정된 종목 코드를 파싱하여 유니버스 목록을 생성합니다."""
+    if not ENV_TICKERS:  # 환경 변수가 없으면 빈 리스트 반환
+        return []
     return [(sym, re.sub(r"\.[A-Z]{2}$", "", sym)) for sym in ENV_TICKERS]
 
 
-import httpx
-
-# ...
-
 async def get_universe(
-    client: httpx.AsyncClient, request: Request, market_code: str
+    client: httpx.AsyncClient, redis_conn: redis.Redis, market_code: str
 ) -> List[Tuple[str, str]]:
+    """분석에 사용할 주식 유니버스를 결정합니다. 환경 변수, API, 기본값 순으로 우선 적용됩니다."""
     # 1. 환경 변수에 TICKERS가 지정되어 있으면 최우선으로 사용
     env_uni = parse_env_universe()
     if env_uni:
@@ -57,7 +58,7 @@ async def get_universe(
 
     # 2. 환경 변수가 없으면, 공공데이터 API를 사용하여 유니버스를 구성
     try:
-        universe = await get_universe_from_market_data(client, request, market_code)
+        universe = await get_universe_from_market_data(client, redis_conn, market_code)
         if universe:
             return universe
     except Exception as e:

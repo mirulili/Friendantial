@@ -1,4 +1,4 @@
-# app/scoring.py
+# app/core/scoring.py
 
 from typing import Dict, Optional
 
@@ -175,9 +175,9 @@ def score_stock(
         f"rsi={rsi:.0f}",
     ]
     if rsi_bonus > 0:
-        reason_parts.append(f"RSI보너스")
+        reason_parts.append("RSI보너스")
     if ma_penalty > 0:
-        reason_parts.append(f"MA이탈")
+        reason_parts.append("MA이탈")
 
     reason = ", ".join(reason_parts)
     if warnings:

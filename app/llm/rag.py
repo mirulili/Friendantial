@@ -1,22 +1,34 @@
-import logging
-from typing import List
+# app/llm/rag.py
 
-import chromadb
-from chromadb.utils import embedding_functions
+import logging
+from typing import Any, List, Optional
 
 
 class SimpleRAG:
     def __init__(self):
-        # 로컬 메모리에 저장되는 가벼운 ChromaDB 클라이언트 생성
-        self.client = chromadb.Client()
-        self.ef = embedding_functions.SentenceTransformerEmbeddingFunction(
-            model_name="jhgan/ko-sroberta-multitask"
-        )
+        # 처음에는 아무것도 로드하지 않고 비워둡니다.
+        self.client: Optional[Any] = None
+        self.ef: Optional[Any] = None
+
+    def _initialize(self):
+        """처음 사용할 때 모델과 DB를 로드합니다 (Lazy Loading)."""
+        if self.client is None:
+            logging.info("RAG 엔진(ChromaDB & Embedding) 초기화 중... (Lazy Load)")
+
+            import chromadb
+            from chromadb.utils import embedding_functions
+
+            self.client = chromadb.Client()
+            self.ef = embedding_functions.SentenceTransformerEmbeddingFunction(
+                model_name="jhgan/ko-sroberta-multitask"
+            )
+            logging.info("RAG 엔진 초기화 완료!")
 
     def create_collection(self, stock_code: str, documents: List[str]):
         """특정 종목을 위한 컬렉션을 생성하고 문서를 저장합니다."""
         # ChromaDB 컬렉션 이름 규칙 준수 (점 . 을 언더바 _ 로 변경)
         # 예: "######.KS" -> "stock_######_KS"
+        self._initialize()
         safe_name = f"stock_{stock_code.replace('.', '_')}"
 
         # 기존 컬렉션 삭제 시 에러 방지 (모든 예외 처리)
@@ -38,6 +50,7 @@ class SimpleRAG:
     def query(self, stock_code: str, question: str, n_results: int = 5) -> List[str]:
         """질문과 가장 유사한 문서를 검색합니다."""
         # 저장할 때와 동일한 이름 규칙 적용
+        self._initialize()
         safe_name = f"stock_{stock_code.replace('.', '_')}"
 
         try:

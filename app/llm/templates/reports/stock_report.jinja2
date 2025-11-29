@@ -1,0 +1,41 @@
+<data>
+  <stock code='{{ stock_code }}' name='{{ stock_name }}'>
+    {% if market_data %}
+    <market_data>
+      <date>{{ market_data.basDt }}</date>
+      <closing_price>{{ "%.0f"|format(market_data.clpr|float) }}</closing_price>
+      <opening_price>{{ "%.0f"|format(market_data.mkp|float) }}</opening_price>
+      <high_price>{{ "%.0f"|format(market_data.hipr|float) }}</high_price>
+      <low_price>{{ "%.0f"|format(market_data.lopr|float) }}</low_price>
+      <change>{{ "%.0f"|format(market_data.vs|float) }}</change>
+      <change_rate>{{ "%.2f"|format(market_data.fltRt|float) }}%</change_rate>
+      <volume>{{ "%.0f"|format(market_data.trqu|float) }}</volume>
+      <market_cap>{{ "%.0f"|format(market_data.mrktTotAmt|float) }}</market_cap>
+    </market_data>
+    {% endif %}
+    {% if tech_analysis %}
+    <technical_indicators>
+      <summary>{{ tech_analysis.summary }}</summary>
+      <price>{{ "%.0f"|format(tech_analysis.price) }}</price>
+      <ma5>{{ "%.0f"|format(tech_analysis.ma5) }}</ma5>
+      <ma20>{{ "%.0f"|format(tech_analysis.ma20) }}</ma20>
+      <ma60>{{ "%.0f"|format(tech_analysis.ma60) }}</ma60>
+      <rsi>{{ "%.1f"|format(tech_analysis.rsi) }}</rsi>
+    </technical_indicators>
+    {% endif %}
+    {% if news_analysis and news_analysis.details %}
+    <news_analysis>
+      <summary>{{ news_analysis.summary }}</summary>
+      {% for news in news_analysis.details %}
+      <item label='{{ news.label }}' confidence='{{ "%.2f"|format(news.confidence) }}'>{{ news.title }}</item>
+      {% endfor %}
+    </news_analysis>
+    {% endif %}
+  </stock>
+</data>
+
+<instructions>
+  <goal>제공된 <data>를 종합하여, 특정 종목에 대한 심층 분석 리포트를 생성합니다.</goal>
+  <format>기술적 분석, 뉴스 분석, 그리고 최종 결론 순서로 문단을 나누어 설명합니다. {{ format_instruction }}</format>
+  {{ perspective_instruction or '<perspective>모멘텀(상승/하락 추세), 변동성(안정성), 그리고 최신 뉴스가 주가에 미치는 영향을 종합적으로 연결하여 하나의 흥미로운 스토리로 풀어냅니다.</perspective>' }}
+</instructions>

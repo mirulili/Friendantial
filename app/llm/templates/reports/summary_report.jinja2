@@ -1,0 +1,32 @@
+<data>
+  <date>{{ as_of }}</date>
+  <stocks>
+    {% for item in candidates %}
+    <stock code='{{ item.code }}' name='{{ item.name }}'>
+      <score>{{ item.score }}</score>
+      <stars>{{ item.stars }}</stars>
+      <reason>{{ item.reason }}</reason>
+      <momentum 
+          m5='{{ "%.2f"|format(item.momentum.m5 * 100) }}%' 
+          m20='{{ "%.2f"|format(item.momentum.m20 * 100) }}%' 
+          m60='{{ "%.2f"|format(item.momentum.m60 * 100) }}%'
+          rsi='{{ "%.1f"|format(item.momentum.rsi) }}' />
+      
+      {% if item.news_sentiment and item.news_sentiment.details %}
+      <news>
+        {% for news in item.news_sentiment.details %}
+        <item label='{{ news.label }}'>{{ news.title }}</item>
+        {% endfor %}
+      </news>
+      {% endif %}
+    </stock>
+    {% endfor %}
+  </stocks>
+</data>
+
+<instructions>
+  <goal>제공된 <data>를 분석하여, 각 종목의 투자 매력도를 설명하는 주간 추천 리포트를 생성합니다.</goal>
+  <format>각 종목을 제목으로 하고, 핵심 내용을 1~2문단으로 요약하여 설명합니다.
+  {{ format_instruction }}</format>
+  {{ perspective_instruction }}
+</instructions>

@@ -1,3 +1,5 @@
+# app/core/presentation.py
+
 from ..schemas.models import RecoItem, StockScore
 
 

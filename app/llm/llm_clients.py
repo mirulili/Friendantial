@@ -1,3 +1,5 @@
+# app/llm/llm_clients.py
+
 from abc import ABC, abstractmethod
 from typing import Dict, List
 
@@ -20,6 +22,9 @@ class AbstractLLMClient(ABC):
         """
         pass
 
+    async def close(self):
+        pass
+
 
 class OpenAIChatClient(AbstractLLMClient):
     """
@@ -37,6 +42,9 @@ class OpenAIChatClient(AbstractLLMClient):
             model=model,
         )
         return chat_completion.choices[0].message.content
+
+    async def close(self):
+        await self._client.close()
 
 
 class GeminiChatClient(AbstractLLMClient):
@@ -60,3 +68,6 @@ class GeminiChatClient(AbstractLLMClient):
         prompt = "\n".join([f"{m['role']}: {m['content']}" for m in messages])
         response = await self._model.generate_content_async(prompt)
         return response.text
+
+    async def close(self):
+        pass
