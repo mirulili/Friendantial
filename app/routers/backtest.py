@@ -17,7 +17,7 @@ from app.services.market_data import fetch_ohlcv
 router = APIRouter(prefix="/backtest", tags=["backtest"])
 
 
-@router.get("/simulate")
+@router.get("/simulate", summary="백테스트")
 async def backtest_strategy(
     target_date: str = Query(..., description="백테스트 기준일 (YYYY-MM-DD)"),
     strategy: StrategyEnum = Query(StrategyEnum.DAY_TRADER, description="전략 선택"),
@@ -27,13 +27,16 @@ async def backtest_strategy(
     client: httpx.AsyncClient = Depends(get_http_client),
     redis_conn: redis.Redis = Depends(get_redis_connection),
 ):
-    # 1. 분석 대상 종목을 설정합니다. (입력이 없으면 전체 유니버스 사용)
+    """
+    특정 날짜와 전략을 기준으로 과거 시점의 종목 추천을 시뮬레이션하고, 이후 수익률을 분석합니다.
+    1. 특정 종목을 시뮬레이션 하는 경우: codes를 입력해 주세요. 전략은 선택하지 마세요.
+    2. 전체 유니버스를 시뮬레이션 하는 경우: codes를 입력하지 마세요. 원하는 전략을 선택해 주세요.
+    """
+    # 1. 분석 대상 종목 설정
     if codes:
         universe_codes = [c.strip() for c in codes.split(",") if c.strip()]
     else:
-        universe_codes = (
-            None  # None으로 전달하여 서비스가 전체 유니버스를 사용하도록 합니다.
-        )
+        universe_codes = None  # 특정 코드가 없으면 전체 유니버스 사용
 
     logging.info(f"Backtesting on {target_date} for {universe_codes or 'ALL'}")
 
@@ -47,12 +50,15 @@ async def backtest_strategy(
         return {"message": "해당 날짜에 추천된 종목이 없습니다.", "backtest_result": []}
 
     results = []
-    # 3. 추천일로부터 7일 후의 수익률을 확인합니다.
+
+    # 3. 추천일로부터 7일 후의 수익률 확인
     future_date = (
         datetime.strptime(target_date, "%Y-%m-%d") + timedelta(days=7)
     ).strftime("%Y-%m-%d")
 
     # 모든 추천 종목의 미래 데이터를 한 번에 조회
+    # 참고: lookback_days=10은 미래 시점(future_date) 기준 과거 10일치 데이터를 가져온다는 의미입니다.
+    # 참고: 만약 future_date 당일 데이터가 없다면(휴장일 등), 해당 기간 내 가장 최신 데이터를 사용하게 됩니다.
     future_data_map = await fetch_ohlcv(
         client,
         redis_conn,

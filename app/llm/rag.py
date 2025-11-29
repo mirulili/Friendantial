@@ -6,7 +6,7 @@ from typing import Any, List, Optional
 
 class SimpleRAG:
     def __init__(self):
-        # 처음에는 아무것도 로드하지 않고 비워둡니다.
+        # 처음에는 아무것도 로드하지 않음
         self.client: Optional[Any] = None
         self.ef: Optional[Any] = None
 

@@ -2,11 +2,11 @@
 
 import httpx
 import redis.asyncio as redis
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Path, Query, Request
 from jinja2 import Environment
 
-from app.dependencies import (get_http_client, get_jinja_env,
-                              get_redis_connection, get_llm_client)
+from app.dependencies import (get_http_client, get_jinja_env, get_llm_client,
+                              get_redis_connection)
 from app.llm.llm_service import generate_text_with_persona
 from app.llm.prompt_builder import build_prompt
 from app.schemas.enums import PersonaEnum
@@ -28,9 +28,9 @@ def get_analysis_service(
 @router.get("/opinion/{stock_code}", summary="종목 관련 질문 답변 (RAG)")
 async def ask_about_stock(
     request: Request,
-    stock_code: str,
-    question: str = Query(..., description="질문 내용 (예: 왜 떨어져?)"),
-    persona: PersonaEnum = Query(PersonaEnum.FRIEND, description="답변 페르소나 선택"),
+    stock_code: str = Path(..., description="종목 코드 (예: 005930.KS)"),
+    question: str = Query(..., description="질문 내용 (예: 이 종목 왜 떨어져?)"),
+    persona: PersonaEnum = Query(PersonaEnum.FRIEND, description="에이전트 성격 선택"),
     analysis_service: AnalysisService = Depends(get_analysis_service),
     client: httpx.AsyncClient = Depends(get_http_client),
     jinja_env: Environment = Depends(get_jinja_env),
@@ -38,17 +38,19 @@ async def ask_about_stock(
     llm_client: httpx.AsyncClient = Depends(get_llm_client),
 ):
     """
-    특정 종목의 최신 뉴스를 기반으로 사용자의 질문에 답변합니다 (RAG 적용).
+    특정 종목의 최신 뉴스를 기반으로 사용자의 질문에 답변합니다.
     """
     # 1. 기본 분석 데이터 가져오기 (기술적 분석 + 뉴스)
     analysis_result = await analysis_service.get_detailed_stock_analysis(stock_code)
     stock_name = analysis_result["stock_name"]
     tech_analysis = analysis_result["technical_analysis"]
-    news_titles = [item['title'] for item in analysis_result["news_analysis"]["details"]]
+    news_titles = [
+        item["title"] for item in analysis_result["news_analysis"]["details"]
+    ]
 
     # 2. 뉴스 데이터가 없으면 간단한 답변 반환
     if not news_titles:
-        return {"answer": "관련된 최신 뉴스를 찾지 못해서 답변하기 어려워 😢"}
+        return {"answer": "관련된 최신 뉴스를 찾지 못해서 답변하기 어렵습니다. 😢"}
 
     # 3. RAG: 벡터 DB에 저장 및 검색
     rag_engine = request.app.state.rag_engine
@@ -56,14 +58,14 @@ async def ask_about_stock(
     rag_engine.create_collection(stock_code, news_titles)
 
     # (2) 관련 문서 검색 (Retrieval)
-    relevant_news = rag_engine.query(stock_code, question, n_results=5)  # type: ignore
+    relevant_news = rag_engine.query(stock_code, question, n_results=5)
 
     # 4. 프롬프트 구성
     context_text = "\n".join([f"- {title}" for title in relevant_news])
 
     user_prompt = build_prompt(
         jinja_env,
-        "rag/rag_opinion.jinja2",  # ✅ 경로 수정 (../ 제거)
+        "rag/rag_opinion.jinja2",
         stock_name=stock_name,
         stock_code=stock_code,
         context_text=context_text,
@@ -81,8 +83,8 @@ async def ask_about_stock(
     )
 
     return {
-        "stock": stock_name,  # type: ignore
+        "stock": stock_name,
         "question": question,
-        "context_used": relevant_news,  # 어떤 뉴스를 참고했는지 명시
+        "context_used": relevant_news,
         "answer": answer,
     }

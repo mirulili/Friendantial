@@ -54,7 +54,7 @@ services:
   frontend:
     build:
       context: .
-      dockerfile: Dockerfile.frontend  # 아래에서 만들 파일
+      dockerfile: Dockerfile.frontend
     container_name: friendantial-frontend
     ports:
       - "8501:8501"  # 브라우저에서 localhost:8501로 접속

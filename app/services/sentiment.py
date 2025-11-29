@@ -60,7 +60,7 @@ NAVER_NEWS_OIDS = dict(
 @asynccontextmanager
 async def sentiment_lifespan(app):
     """FastAPI lifespan 이벤트 핸들러로, 애플리케이션 시작 시 감성 분석 모델을 비동기적으로 로드합니다."""
-    logging.info("Sentiment pipeline 초기화 작업을 시작합니다 (백그라운드)...")
+    logging.info("Sentiment pipeline 초기화 작업을 시작합니다...")
 
     # 1. 일단 빈 상태로 시작 (서버 부팅 차단 방지)
     app.state.sentiment_pipe = None
@@ -69,7 +69,7 @@ async def sentiment_lifespan(app):
     async def load_model_background():
         try:
             # CPU를 많이 쓰는 작업을 별도 스레드에서 실행하여 이벤트 루프 차단 방지
-            logging.info("모델 파일 로딩 중... (서버는 이미 실행됨)")
+            logging.info("감성 분석 모델 로딩 중...")
 
             # 토크나이저와 모델 로드 (동기 함수이므로 to_thread 사용)
             tok, mdl = await asyncio.to_thread(
@@ -90,10 +90,10 @@ async def sentiment_lifespan(app):
             # app.state에 직접 파이프라인 설정
             app.state.analysis_service.sentiment_pipe = pipe
             app.state.sentiment_pipe = pipe
-            logging.info(f"Sentiment pipeline 준비 완료: {SENTIMENT_MODEL_ID}")
+            logging.info(f"Sentiment pipeline 준비 완료 되었습니다.: {SENTIMENT_MODEL_ID}")
 
         except Exception as e:
-            logging.error(f"Sentiment pipeline 초기화 실패: {e}")
+            logging.error(f"Sentiment pipeline 초기화 중 오류가 발생하였습니다.: {e}")
 
     # 3. 백그라운드 태스크로 실행! (기다리지 않고 넘어감)
     asyncio.create_task(load_model_background())
@@ -113,7 +113,7 @@ async def fetch_news_titles(
 
     if not NAVER_CLIENT_ID or not NAVER_CLIENT_SECRET:
         logging.error(
-            "Naver API credentials(NAVER_CLIENT_ID, NAVER_CLIENT_SECRET) are not set."
+            "네이버 뉴스 API credentials(NAVER_CLIENT_ID, NAVER_CLIENT_SECRET)가 설정되지 않았습니다."
         )
         return []
 
@@ -173,7 +173,7 @@ async def fetch_news_titles(
                     break
         return titles
     except Exception as e:
-        logging.warning(f"뉴스 수집 실패 (종목: {query}): {e}")
+        logging.warning(f"뉴스 수집 중 오류가 발생하였습니다. (종목: {query}): {e}")
         return []
 
 
@@ -249,7 +249,7 @@ def analyze_news_sentiment(pipe: pipeline, headlines: List[str]) -> dict:
             {"title": title, "label": display_label, "confidence": round(confidence, 3)}
         )
 
-    summary = f"최근 뉴스 {len(details)}건 분석 완료"
+    summary = f"최근 뉴스 {len(details)}건 분석 완료하였습니다."
     return {
         "enabled": True,
         "summary": summary,

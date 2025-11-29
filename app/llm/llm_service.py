@@ -32,7 +32,7 @@ async def generate_text_with_persona(
         system_prompt = template.render()
     except Exception:
         raise HTTPException(
-            status_code=400, detail=f"알 수 없는 페르소나: {persona_name}"
+            status_code=400, detail=f"에이전트에게 없는 성격입니다.: {persona_name}"
         )
 
     model_name = os.getenv("LLM_MODEL_NAME", "gpt-4-turbo")

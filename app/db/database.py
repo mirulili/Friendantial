@@ -6,7 +6,7 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 from ..config import DATABASE_URL
 
 if not DATABASE_URL:
-    raise RuntimeError("DATABASE_URL is not set in the environment variables.")
+    raise RuntimeError("DATABASE_URL이 환경변수에 설정되지 않았습니다.")
 
 # 데이터베이스 엔진 생성
 engine = create_engine(DATABASE_URL)

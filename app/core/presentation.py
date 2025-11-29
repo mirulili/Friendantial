@@ -1,5 +1,7 @@
 # app/core/presentation.py
 
+from ..config import (RSI_EXTREME_OVERBOUGHT, RSI_OVERBOUGHT, RSI_OVERSOLD,
+                      RSI_STRONG_OVERBOUGHT)
 from ..schemas.models import RecoItem, StockScore
 
 
@@ -22,13 +24,13 @@ def generate_friendly_reason(stock_score: StockScore) -> str:
         parts.append("단기적으로 조정을 받고 있으나,")
 
     # 2. RSI(과열/침체) 평가
-    if rsi >= 80:
+    if rsi >= RSI_STRONG_OVERBOUGHT:
         parts.append(
             f"RSI({rsi:.0f})가 초과열권이라 '매도' 압력이 커질 수 있어 주의가 필요합니다."
         )
-    elif rsi >= 70:
+    elif rsi >= RSI_OVERBOUGHT:
         parts.append(f"RSI({rsi:.0f})가 과열권에 진입해 잠시 쉬어갈 수 있습니다.")
-    elif rsi <= 30:
+    elif rsi <= RSI_OVERSOLD:
         parts.append(
             f"RSI({rsi:.0f})가 침체권이라 기술적 '반등'이 기대되는 자리입니다."
         )
@@ -60,9 +62,9 @@ def calculate_stock_stars(item: RecoItem, market_regime: str) -> int:
         stars = 2
 
     # 리스크 필터 (RSI, 뉴스 악재 등)
-    if rsi >= 80:
+    if rsi >= RSI_STRONG_OVERBOUGHT:
         stars = min(stars, 4)
-    if rsi >= 90:
+    if rsi >= RSI_EXTREME_OVERBOUGHT:
         stars = min(stars, 3)
     if item.news_sentiment and "강력한 악재" in str(item.news_sentiment):
         stars = min(stars, 3)
@@ -111,12 +113,6 @@ def generate_ma_comment(price: float, ma5: float, ma20: float, ma60: float) -> s
         parts.append("현재 주가가 5일선 위에 있어 단기 탄력이 좋습니다.")
     elif price < ma5:
         parts.append("주가가 5일선 아래로 내려와 단기 조정을 받고 있습니다.")
-
-    # 3. 골든크로스/데드크로스 징후 (예정)
-    # (수치 차이가 1% 이내일 때 등 정교한 로직 추가 가능)
-
-    # 4. 지지/저항 (가장 가까운 이평선 찾기)
-    # 예: 주가가 MA20 근처에 있으면 "20일선 지지 여부가 중요합니다."
 
     if not parts:
         parts.append("이동평균선이 혼조세를 보이며 뚜렷한 방향성을 탐색 중입니다.")

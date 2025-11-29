@@ -15,7 +15,7 @@ class RecommendationRun(Base):
     as_of = Column(Date, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    # Relationship to RecommendedStock
+    # RecommendedStock
     stocks = relationship("RecommendedStock", back_populates="run")
 
 
@@ -31,9 +31,9 @@ class RecommendedStock(Base):
     weight = Column(Float, nullable=False)
     reason = Column(String)
 
-    # Storing complex data as JSON
+    # 복잡한 데이터를 JSON으로 저장
     momentum = Column(JSON)
     news_sentiment = Column(JSON)
 
-    # Relationship to RecommendationRun
+    # RecommendationRun
     run = relationship("RecommendationRun", back_populates="stocks")

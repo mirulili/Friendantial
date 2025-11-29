@@ -49,32 +49,13 @@ Friendantial은 투자자가 시장을 분석할 때 참고할 수 있는 주식
     **Market Data**: 공공데이터포털 (금융위원회 주식시세정보)
     **News**: Naver News API
 * **인프라**: Docker, Docker Compose
+* **Frontend**: Streamlit (Python 기반 웹 인터페이스)
 
 ## 시작하기
 
 ### 1. 환경 변수 설정
 
-프로젝트 루트에 .env 파일을 생성하고 아래 내용을 채워주세요.
-
-```bash
-# API Keys
-DATA_GO_KR_API_KEY=your_data_go_kr_key_decoded
-NAVER_CLIENT_ID=your_naver_client_id
-NAVER_CLIENT_SECRET=your_naver_client_secret
-
-# LLM Provider (openai or gemini)
-LLM_PROVIDER=openai
-OPENAI_API_KEY=your_openai_key
-# GEMINI_API_KEY=your_gemini_key
-
-# Database & Redis
-DATABASE_URL=postgresql://user:password@db:5432/friendantial
-REDIS_URL=redis://redis:6379/0
-
-# Settings
-LOG_LEVEL=INFO
-MARKET=KS
-```
+프로젝트 루트에 .env 파일을 생성하고 내용을 채워주세요.
 
 ### 2. 실행 방법 (Makefile 사용 권장)
 
@@ -83,17 +64,20 @@ MARKET=KS
 **로컬 개발 환경 실행:**
 
 ```bash
-# 의존성 설치
-make install
+# 의존성 설치 (백엔드 + 프론트엔드)
+make install-all
 
-# 서버 실행 (http://localhost:8000)
+# 백엔드 서버 실행 (http://localhost:8000)
 make run
+
+# 프론트엔드 실행 (http://localhost:8501)
+make run-frontend
 ```
 
 **Docker 환경 실행:**
 
 ```bash
-# 컨테이너 빌드 및 실행
+# 컨테이너 빌드 및 실행 (백엔드 + 프론트엔드 + DB + Redis)
 make all
 
 # 로그 확인
@@ -102,6 +86,8 @@ make logs
 # 컨테이너 중지 및 삭제
 make down
 ```
+
+> **참고**: Docker 환경 실행 시 프론트엔드는 `http://localhost:8501`에서 접속할 수 있습니다.
 
 ## 주요 API 엔드포인트
 
@@ -112,9 +98,10 @@ make down
 | GET | `/reporting/stock/{stock_code}` | 개별 종목 심층 분석 리포트 | persona |
 | GET | `/opinion/opinion/{stock_code}` | 종목 관련 RAG 질의응답 | question (질문 내용) |
 | GET | `/backtest/simulate` | 과거 시점 전략 시뮬레이션 | target_date, codes |
-| GET | `/basic_analysis/news-sentiment/{stock_name}` | 뉴스 감성 분석 결과 조회 | |
+| GET | `/basic_analysis/news-sentiment/{stock_identifier}` | 뉴스 감성 분석 결과 조회 | stock_identifier (종목명/코드) |
+| GET | `/basic_analysis/technical-indicator/{stock_code}` | 기술적 지표 조회 | |
 | GET | `/market-data/ohlcv/{stock_code}` | OHLCV 시세 데이터 조회 | lookback_days |
 | GET | `/history/recommendations` | 과거 추천 이력 조회 | start_date, end_date |
 | GET | `/health` | 서버 상태 확인 | |
 
-> 각 엔드포인트의 상세한 파라미터와 응답 형식은 서버 실행 후 http://127.0.0.1:8000/docs 에서 확인할 수 있습니다.
+> 각 엔드포인트의 상세한 파라미터와 응답 형식은 서버 실행 후 <http://127.0.0.1:8000/docs> 에서 확인할 수 있습니다.

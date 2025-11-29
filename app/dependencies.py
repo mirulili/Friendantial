@@ -28,7 +28,7 @@ def get_db() -> SessionLocal:
         db.close()
 
 
-async def get_redis_connection(request: Request) -> redis.Redis:  # type: ignore
+async def get_redis_connection(request: Request) -> redis.Redis:
     """FastAPI 애플리케이션 상태에서 Redis 연결을 가져옵니다."""
     return request.app.state.redis
 

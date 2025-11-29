@@ -21,7 +21,10 @@ async def fetch_ohlcv(
     end_date: Optional[str] = None,
     lookback_days: int = 120,
 ) -> Dict[str, pd.DataFrame]:
-    """공공데이터포털 API를 사용하여 여러 종목의 OHLCV 데이터를 비동기적으로 가져옵니다. 결과는 종목 코드별 데이터프레임 딕셔너리로 반환됩니다."""
+    """
+    공공데이터포털 API를 사용하여 여러 종목의 OHLCV 데이터를 비동기적으로 가져옵니다.
+    결과는 종목 코드별 데이터프레임 딕셔너리로 반환됩니다.
+    """
     if end_date is None:
         end_date = datetime.now(TZ).date().isoformat()
     try:
@@ -29,7 +32,7 @@ async def fetch_ohlcv(
     except ValueError:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid as_of date '{end_date}'; expected YYYY-MM-DD",
+            detail=f"'{end_date}'는 잘못된 날짜 형식입니다. YYYY-MM-DD 형식으로 입력해주세요.",
         )
     start_dt = end_dt - timedelta(days=max(lookback_days, 30))
 
@@ -37,7 +40,7 @@ async def fetch_ohlcv(
         logging.error("DATA_GO_KR_API_KEY가 설정되지 않았습니다.")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="API key is not configured.",
+            detail="API key가 설정되지 않았습니다.",
         )
 
     dates_to_fetch = [
@@ -57,19 +60,19 @@ async def fetch_ohlcv(
         if isinstance(res, list):
             all_rows.extend(res)
         elif isinstance(res, Exception):
-            logging.warning("Failed to fetch daily prices: %s", res)
+            logging.warning("API 호출 중 오류가 발생했습니다.: %s", res)
 
     if not all_rows:
         logging.warning("API로부터 어떠한 데이터도 가져오지 못했습니다.")
         return {code: pd.DataFrame() for code in codes}
 
     full_df = pd.DataFrame(all_rows)
-    # API 응답의 숫자 필드는 문자열이므로 숫자 형태로 변환합니다.
+    # API 응답의 숫자 필드는 문자열이므로 숫자 형태로 변환
     numeric_cols = ["clpr", "hipr", "lopr", "mkp", "trqu", "trPrc"]
     for col in numeric_cols:
         full_df[col] = pd.to_numeric(full_df[col], errors="coerce")
 
-    # yfinance 티커 형식('######.KS')을 공공데이터포털 형식('######')으로 미리 변환합니다.
+    # yfinance 티커 형식('######.KS')을 공공데이터포털 형식('######')으로 미리 변환
     code_mapping = {code: code.split(".")[0] for code in codes}
 
     out: Dict[str, pd.DataFrame] = {}
@@ -108,7 +111,7 @@ async def _fetch_daily_prices(
     """특정 날짜의 모든 종목 시세 데이터를 가져옵니다. 과거 데이터는 Redis에 캐시하여 사용합니다."""
     cache_key = f"market-data:{date.strftime('%Y%m%d')}"
 
-    # 당일 데이터는 변동 가능성이 있으므로 캐시하지 않고, 과거 데이터만 캐시를 확인합니다.
+    # 당일 데이터는 변동 가능성이 있으므로 캐시하지 않고, 과거 데이터만 캐시를 확인
     is_past_date = date < datetime.now(TZ).date()
 
     if is_past_date:
@@ -148,7 +151,7 @@ async def _fetch_daily_prices(
 
             all_items.extend(items)
 
-            # 마지막 페이지인지 확인하여 모든 데이터를 가져옵니다.
+            # 마지막 페이지인지 확인하여 모든 데이터를 가져옴
             total_count = int(
                 data.get("response", {}).get("body", {}).get("totalCount", 0)
             )
@@ -156,18 +159,18 @@ async def _fetch_daily_prices(
                 break
 
             page_no += 1
-            await asyncio.sleep(0.1)  # API 서버 부하 감소를 위해 짧은 지연을 둡니다.
+            await asyncio.sleep(0.1)  # API 서버 부하 감소를 위해 짧은 지연
 
         except Exception as e:
             logging.error(
                 "공공데이터 API 호출 실패 (date: %s, page: %s): %s", date, page_no, e
             )
-            # 한 페이지라도 실패하면, 현재까지 수집된 데이터만 반환하고 중단합니다.
+            # 한 페이지라도 실패하면, 현재까지 수집된 데이터만 반환하고 중단
             break
 
     if is_past_date and all_items:
         try:
-            # 과거 데이터는 7일간 캐시합니다.
+            # 과거 데이터는 7일간 캐시
             await redis_conn.set(
                 cache_key,
                 json.dumps(all_items),
@@ -190,11 +193,11 @@ async def _fetch_stock_info(
     try:
         cached_data = await redis_conn.get(cache_key)
         if cached_data:
-            logging.debug("Reading stock info from Redis cache: %s", cache_key)
+            logging.debug("Redis 캐시에서 종목 정보를 읽습니다.: %s", cache_key)
             return json.loads(cached_data)
     except Exception as e:
         logging.warning(
-            "Redis cache read error for stock info, fetching from API: %s", e
+            "Redis 캐시에서 종목 정보를 읽는 중 오류가 발생했습니다.: %s", e
         )
 
     # 2. 캐시 없으면 API 호출
@@ -208,7 +211,7 @@ async def _fetch_stock_info(
                     ex=int(timedelta(days=1).total_seconds()),
                 )
             except Exception as e:
-                logging.error("Redis cache write error for stock info: %s", e)
+                logging.error("Redis 캐시 쓰기 중 오류가 발생했습니다.: %s", e)
             return item
     return None
 
@@ -222,7 +225,7 @@ async def get_stock_name_from_code(
     """
     # 기본값은 종목 코드 자체
     stock_name = stock_code
-    # 입력이 '005930.KS'와 같은 코드 형식인지 확인합니다.
+    # 입력이 '005930.KS'와 같은 코드 형식인지 확인
     if "." in stock_code:
         try:
             # 로컬 헬퍼 함수를 직접 호출

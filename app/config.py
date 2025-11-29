@@ -61,6 +61,31 @@ SENTIMENT_NEWS_WEIGHT_DECAY_RATE = float(
     os.getenv("SENTIMENT_NEWS_WEIGHT_DECAY_RATE", "0.2")
 )
 
-# Naver API credentials
+# 네이버 API credentials
 NAVER_CLIENT_ID = os.getenv("NAVER_CLIENT_ID")
 NAVER_CLIENT_SECRET = os.getenv("NAVER_CLIENT_SECRET")
+
+# Scoring 상수
+RSI_OVERSOLD = int(os.getenv("RSI_OVERSOLD", "30"))
+RSI_OVERBOUGHT = int(os.getenv("RSI_OVERBOUGHT", "70"))
+RSI_STRONG_OVERBOUGHT = int(os.getenv("RSI_STRONG_OVERBOUGHT", "80"))
+RSI_EXTREME_OVERBOUGHT = int(os.getenv("RSI_EXTREME_OVERBOUGHT", "90"))
+
+# Strategy 설정 (투자 전략에 따른 가중치 설정값)
+STRATEGY_CONFIG = {
+    "day_trader": {
+        "mom_weights": (0.5, 0.2, 0.0),
+        "vol_penalty_weight": 0.2,
+        "news_impact_factor": 0.4,
+    },
+    "long_term": {
+        "mom_weights": (0.1, 0.3, 0.6),
+        "vol_penalty_weight": 1.5,
+        "news_impact_factor": 0.1,
+    },
+    "default": {
+        "mom_weights": (0.4, 0.3, 0.3),
+        "vol_penalty_weight": 0.5,
+        "news_impact_factor": 0.2,
+    },
+}

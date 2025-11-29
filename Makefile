@@ -11,9 +11,12 @@ IMAGE_NAME := friendantial-app
 TAG := latest
 CONTAINER_NAME := friendantial
 
-.PHONY: all install run clean build up down logs shell docker-clean help lint format
+.PHONY: all install run clean build up down logs shell docker-clean help lint format test
 
-all: run
+all: up
+
+test:
+	pytest
 
 # ==============================================================================
 # Local Development
@@ -64,3 +67,33 @@ shell:
 docker-clean: down
 	docker rmi $(IMAGE_NAME):$(TAG)
 	docker system prune -f
+
+# ==============================================================================
+# Frontend Operations
+# ==============================================================================
+
+# 로컬에서 프론트엔드 실행
+run-frontend:
+	streamlit run app/frontend/main.py
+
+# 프론트엔드 의존성 설치
+install-frontend:
+	$(PIP) install -r app/frontend/requirements.txt
+
+# 전체 설치 (백엔드 + 프론트엔드)
+install-all: install install-frontend
+
+help:
+	@echo "Available commands:"
+	@echo "  make install       - Install backend dependencies"
+	@echo "  make install-all   - Install backend and frontend dependencies"
+	@echo "  make run           - Run local backend server"
+	@echo "  make run-frontend  - Run local frontend app"
+	@echo "  make all           - Build and run Docker containers"
+	@echo "  make up            - Build and run Docker containers (detached)"
+	@echo "  make down          - Stop and remove Docker containers"
+	@echo "  make logs          - View Docker logs"
+	@echo "  make test          - Run tests"
+	@echo "  make lint          - Run linting"
+	@echo "  make format        - Run formatting"
+	@echo "  make clean         - Clean up cache files"

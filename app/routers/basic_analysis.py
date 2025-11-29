@@ -4,7 +4,7 @@ from typing import Any
 
 import httpx
 import redis.asyncio as redis
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from sqlalchemy.orm import Session
 
 from app.dependencies import (get_db, get_http_client, get_redis_connection,
@@ -16,7 +16,7 @@ from app.services.analysis import AnalysisService
 # APIRouter 인스턴스 생성
 router = APIRouter(
     prefix="/basic_analysis",
-    tags=["basic_analysis"],  # API 문서에서 'analysis' 그룹으로 묶음
+    tags=["basic_analysis"],
 )
 
 
@@ -37,22 +37,29 @@ def get_analysis_service(
 
 @router.get("/news-sentiment/{stock_identifier}", summary="특정 종목의 뉴스 감성 분석")
 async def get_news_sentiment_for_stock(
-    stock_identifier: str,
+    stock_identifier: str = Path(
+        ..., description="종목 이름 또는 코드 (예: 삼성전자 또는 005930.KS)"
+    ),
     analysis_service: AnalysisService = Depends(get_analysis_service),
 ):
     """
     주어진 종목 이름(또는 코드)에 대한 최신 뉴스를 수집하고 감성 분석을 수행합니다.
     """
     try:
-        analysis_result = await analysis_service.get_detailed_stock_analysis(stock_identifier)
-        return {"stock_identifier": stock_identifier, **analysis_result["news_analysis"]}
+        analysis_result = await analysis_service.get_detailed_stock_analysis(
+            stock_identifier
+        )
+        return {
+            "stock_identifier": stock_identifier,
+            **analysis_result["news_analysis"],
+        }
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
 
-@router.get("/technical-indicator/{stock_code}", summary="특정 종목의 기술적 지표 분석")
+@router.get("/technical-indicator/{stock_code}", summary="특정 종목의 기술적 지표")
 async def get_technical_analysis(
-    stock_code: str,
+    stock_code: str = Path(..., description="종목 코드 (예: 005930.KS)"),
     analysis_service: AnalysisService = Depends(get_analysis_service),
 ):
     """
@@ -67,7 +74,9 @@ async def get_technical_analysis(
 
 @router.get("/recommendations", response_model=RecoResponse, summary="종합 주식 추천")
 async def get_recommendations(
-    strategy: StrategyEnum = Query(StrategyEnum.DAY_TRADER, description="전략 선택"),
+    strategy: StrategyEnum = Query(
+        StrategyEnum.DAY_TRADER, description="투자 전략 선택"
+    ),
     analysis_service: AnalysisService = Depends(get_analysis_service),
 ):
     """

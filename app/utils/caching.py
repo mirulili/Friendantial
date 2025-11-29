@@ -11,15 +11,14 @@ from app.config import TZ
 
 
 def _find_redis_conn(*args, **kwargs) -> redis.Redis:
-    """Декораторға берілген аргументтерден redis.Redis данасын табады."""
+    """데코레이터에 전달된 인자 중에서 redis.Redis 인스턴스를 찾습니다."""
     if "redis_conn" in kwargs:
         return kwargs["redis_conn"]
     for arg in args:
         if isinstance(arg, redis.Redis):
             return arg
     raise TypeError(
-        "Redis connection not found in decorated function's arguments."
-        "Please provide 'redis_conn' as a keyword argument."
+        "Redis 연결이 발견되지 않았습니다." "'redis_conn' 키워드 인자를 제공해주세요."
     )
 
 

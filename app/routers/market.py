@@ -4,7 +4,7 @@ from typing import Optional
 
 import httpx
 import redis.asyncio as redis
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Path
 
 from app.dependencies import get_http_client, get_redis_connection
 from app.services.market_data import _fetch_stock_info, fetch_ohlcv
@@ -15,14 +15,14 @@ router = APIRouter(
 )
 
 
-@router.get("/lookup/{stock_code}", summary="종목 정보 조회 (코드 -> 이름 변환)")
+@router.get("/lookup/{stock_code}", summary="종목 정보 조회 (코드 → 이름 변환)")
 async def lookup_stock_info(
-    stock_code: str,
+    stock_code: str = Path(..., description="종목 코드 (예: 005930.KS)"),
     client: httpx.AsyncClient = Depends(get_http_client),
     redis_conn: redis.Redis = Depends(get_redis_connection),
 ):
     """
-    주어진 종목 코드(예: 005930.KS)에 해당하는 종목명, 시장 구분 등의 정보를 반환합니다.
+    주어진 종목 코드에 해당하는 종목명, 시장 구분 등의 정보를 반환합니다.
     내부적으로 캐싱이 적용되어 반복 호출 시 빠릅니다.
     """
     stock_info = await _fetch_stock_info(client, redis_conn, stock_code)
@@ -42,7 +42,7 @@ async def lookup_stock_info(
 
 @router.get("/ohlcv/{stock_code}", summary="종목 시세(OHLCV) 조회")
 async def get_ohlcv_for_stock(
-    stock_code: str,
+    stock_code: str = Path(..., description="종목 코드 (예: 005930.KS)"),
     lookback_days: int = 120,
     end_date: Optional[str] = None,
     client: httpx.AsyncClient = Depends(get_http_client),

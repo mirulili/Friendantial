@@ -11,6 +11,7 @@ import jinja2
 import redis.asyncio as redis
 from dotenv import load_dotenv
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import REDIS_URL, TZ, logging_config
 from app.db.database import engine, get_db
@@ -29,27 +30,27 @@ logging.basicConfig(**logging_config)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 애플리케이션 시작 시 데이터베이스 테이블을 생성합니다.
+    # 애플리케이션 시작 시 데이터베이스 테이블을 생성
     Base.metadata.create_all(bind=engine)
 
-    # Redis 연결 풀을 생성하여 애플리케이션 상태에 저장합니다.
+    # Redis 연결 풀을 생성하여 애플리케이션 상태에 저장
     app.state.redis = redis.from_url(REDIS_URL, encoding="utf-8", decode_responses=True)
     app.state.tz = TZ
 
-    # 자주 사용되는 유틸리티 함수를 애플리케이션 상태에 등록합니다.
+    # 자주 사용되는 유틸리티 함수를 애플리케이션 상태에 등록
     from app.services.market_data import _fetch_stock_info
 
     app.state.lookup_stock_info = _fetch_stock_info
 
-    # LLM 프롬프트에 사용될 Jinja2 템플릿 환경을 설정합니다.
+    # LLM 프롬프트에 사용될 Jinja2 템플릿 환경 설정
     app.state.jinja_env = jinja2.Environment(
         loader=jinja2.FileSystemLoader("app/llm/templates")
     )
 
-    # 외부 API 호출을 위한 HTTP 클라이언트를 생성합니다.
+    # 외부 API 호출을 위한 HTTP 클라이언트 생성
     app.state.http_client = httpx.AsyncClient()
 
-    # 환경 변수(LLM_PROVIDER)에 따라 사용할 LLM 클라이언트를 동적으로 선택합니다.
+    # 환경 변수(LLM_PROVIDER)에 따라 사용할 LLM 클라이언트를 동적으로 선택
     llm_provider = os.getenv("LLM_PROVIDER", "openai").lower()
     app.state.llm_client = None
 
@@ -60,7 +61,7 @@ async def lifespan(app: FastAPI):
         if api_key:
             app.state.llm_client = OpenAIChatClient(api_key=api_key)
     elif llm_provider == "gemini":
-        api_key = os.getenv("GEMINI_API_KEY")  # Gemini를 위한 별도 API 키
+        api_key = os.getenv("GEMINI_API_KEY")
         if api_key:
             app.state.llm_client = GeminiChatClient(api_key=api_key)
 
@@ -69,15 +70,15 @@ async def lifespan(app: FastAPI):
             "LLM 클라이언트가 초기화되지 않았습니다. LLM_PROVIDER 및 해당 API 키 환경 변수를 확인하세요."
         )
 
-    # RAG 엔진을 애플리케이션 상태에 추가합니다.
+    # RAG 엔진을 애플리케이션 상태에 추가
     app.state.rag_engine = rag_engine
 
-    # lifespan 동안 사용할 DB 세션을 생성합니다.
+    # lifespan 동안 사용할 DB 세션 생성
     db_session_generator = get_db()
     db = next(db_session_generator)
 
     try:
-        # AnalysisService를 애플리케이션 상태에 추가합니다.
+        # AnalysisService를 애플리케이션 상태에 추가
         app.state.analysis_service = AnalysisService(
             sentiment_pipe=None,  # sentiment_lifespan에서 채워짐
             http_client=app.state.http_client,
@@ -87,7 +88,7 @@ async def lifespan(app: FastAPI):
 
         async with sentiment_lifespan(app):
             yield
-    # 애플리케이션 종료 시 리소스를 정리합니다.
+    # 애플리케이션 종료 시 리소스 정리
     finally:
         next(db_session_generator, None)  # DB 세션 정리
         await app.state.redis.close()
@@ -102,6 +103,14 @@ app = FastAPI(
     title="Friendantial",
     version="1.0",
     lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.include_router(market.router)

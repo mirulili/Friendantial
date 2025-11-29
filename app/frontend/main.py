@@ -1,21 +1,21 @@
 # frontend/main.py
 
 import os
+from urllib.parse import quote
 
 import pandas as pd
+import plotly.graph_objects as go
 import requests
 import streamlit as st
-import plotly.graph_objects as go
 
-from urllib.parse import quote
-# 백엔드 API 주소 (Docker 환경 고려)
+# 백엔드 API 주소
 # 로컬 실행 시: http://localhost:8000
-# Docker Compose 실행 시: http://api:8000 (서비스명 사용)
+# Docker Compose 실행 시: http://api:8000
 API_URL = os.getenv("API_URL", "http://localhost:8000")
 
 st.set_page_config(page_title="Friendantial", page_icon="🐵", layout="wide")
 
-st.title("🐵 Friendantial: 내 손안의 AI 투자 친구")
+st.title("🐵 Friendantial: 아침을 여는 AI 투자 친구")
 
 # 사이드바: 설정
 with st.sidebar:
@@ -26,12 +26,17 @@ with st.sidebar:
 
 # 탭 구성
 tab1, tab2, tab3, tab4, tab5 = st.tabs(
-    ["📊 오늘의 추천", "📈 개별 종목 분석", "💬 종목 상담 (RAG)", "📂 추천 이력", "🔬 백테스트"]
+    [
+        "📊 오늘의 추천",
+        "📈 개별 종목 분석",
+        "💬 종목 상담 (RAG)",
+        "📂 추천 이력",
+        "🔬 백테스트",
+    ]
 )
 
 # --- 탭 1: 추천 및 리포트 ---
 with tab1:
-    st.subheader("오늘의 추천 및 AI 리포트")
     st.header("오늘의 추천 포트폴리오")
 
     if st.button("추천 종목 분석 시작 🚀"):
@@ -64,7 +69,7 @@ with tab1:
                         df[["name", "code", "score", "stars", "reason", "price"]]
                     )
             except Exception as e:
-                st.error(f"서버 연결 오류: {e}")
+                st.error(f"서버 연결 중 오류가 발생했습니다.: {e}")
 
 # --- 탭 2: 개별 종목 분석 ---
 with tab2:
@@ -89,7 +94,9 @@ with tab2:
                     report_data = response.json()
 
                     st.subheader("📝 AI 심층 분석 리포트")
-                    st.markdown(report_data.get("report", "리포트 생성에 실패했습니다."))
+                    st.markdown(
+                        report_data.get("report", "리포트 생성에 실패했습니다.")
+                    )
 
                     # 상세 데이터 (차트, 기술적 지표, 뉴스) 요청
                     with st.expander("상세 데이터 보기 (차트, 지표, 뉴스)"):
@@ -99,49 +106,100 @@ with tab2:
                             "tech": f"{API_URL}/basic_analysis/technical-indicator/{encoded_input}",
                             "news": f"{API_URL}/basic_analysis/news-sentiment/{encoded_input}",
                         }
-                        
-                        # 모든 요청을 한 번에 보냅니다.
+
                         responses = {
                             name: requests.get(url) for name, url in urls.items()
                         }
 
-                        # 각 응답을 처리합니다.
-                        ohlcv_data = responses["ohlcv"].json() if responses["ohlcv"].status_code == 200 else {}
-                        tech_data = responses["tech"].json() if responses["tech"].status_code == 200 else {}
-                        news_data = responses["news"].json() if responses["news"].status_code == 200 else {}
+                        # 각 응답을 처리
+                        ohlcv_data = (
+                            responses["ohlcv"].json()
+                            if responses["ohlcv"].status_code == 200
+                            else {}
+                        )
+                        tech_data = (
+                            responses["tech"].json()
+                            if responses["tech"].status_code == 200
+                            else {}
+                        )
+                        news_data = (
+                            responses["news"].json()
+                            if responses["news"].status_code == 200
+                            else {}
+                        )
 
                         # 탭으로 상세 데이터 구성
-                        tab_chart, tab_tech, tab_news = st.tabs(["📈 가격 차트", "🛠️ 기술 지표", "📰 뉴스 분석"])
+                        tab_chart, tab_tech, tab_news = st.tabs(
+                            ["📈 가격 차트", "🛠️ 기술 지표", "📰 뉴스 분석"]
+                        )
 
                         with tab_chart:
                             if ohlcv_data:
-                                df_ohlcv = pd.DataFrame.from_dict(ohlcv_data, orient='index')
+                                df_ohlcv = pd.DataFrame.from_dict(
+                                    ohlcv_data, orient="index"
+                                )
                                 df_ohlcv.index = pd.to_datetime(df_ohlcv.index)
 
                                 # 이동평균선 계산
-                                ma5 = df_ohlcv['close'].rolling(window=5).mean()
-                                ma20 = df_ohlcv['close'].rolling(window=20).mean()
-                                ma60 = df_ohlcv['close'].rolling(window=60).mean()
+                                ma5 = df_ohlcv["close"].rolling(window=5).mean()
+                                ma20 = df_ohlcv["close"].rolling(window=20).mean()
+                                ma60 = df_ohlcv["close"].rolling(window=60).mean()
 
                                 # 캔들스틱 차트 생성
-                                fig = go.Figure(data=[go.Candlestick(x=df_ohlcv.index,
-                                                open=df_ohlcv['open'],
-                                                high=df_ohlcv['high'],
-                                                low=df_ohlcv['low'],
-                                                close=df_ohlcv['close'],
-                                                name='OHLC')])
+                                fig = go.Figure(
+                                    data=[
+                                        go.Candlestick(
+                                            x=df_ohlcv.index,
+                                            open=df_ohlcv["open"],
+                                            high=df_ohlcv["high"],
+                                            low=df_ohlcv["low"],
+                                            close=df_ohlcv["close"],
+                                            name="OHLC",
+                                        )
+                                    ]
+                                )
 
-                                # 이동평균선 트레이스 추가
-                                fig.add_trace(go.Scatter(x=df_ohlcv.index, y=ma5, mode='lines', name='MA5', line=dict(color='orange', width=1)))
-                                fig.add_trace(go.Scatter(x=df_ohlcv.index, y=ma20, mode='lines', name='MA20', line=dict(color='purple', width=1)))
-                                fig.add_trace(go.Scatter(x=df_ohlcv.index, y=ma60, mode='lines', name='MA60', line=dict(color='cyan', width=1)))
+                                # 이동평균선 트레이스
+                                fig.add_trace(
+                                    go.Scatter(
+                                        x=df_ohlcv.index,
+                                        y=ma5,
+                                        mode="lines",
+                                        name="MA5",
+                                        line=dict(color="orange", width=1),
+                                    )
+                                )
+                                fig.add_trace(
+                                    go.Scatter(
+                                        x=df_ohlcv.index,
+                                        y=ma20,
+                                        mode="lines",
+                                        name="MA20",
+                                        line=dict(color="purple", width=1),
+                                    )
+                                )
+                                fig.add_trace(
+                                    go.Scatter(
+                                        x=df_ohlcv.index,
+                                        y=ma60,
+                                        mode="lines",
+                                        name="MA60",
+                                        line=dict(color="cyan", width=1),
+                                    )
+                                )
 
                                 fig.update_layout(
-                                    title=f'{stock_code_input} 가격 및 이동평균선',
-                                    xaxis_title='날짜',
-                                    yaxis_title='가격',
+                                    title=f"{stock_code_input} 가격 및 이동평균선",
+                                    xaxis_title="날짜",
+                                    yaxis_title="가격",
                                     xaxis_rangeslider_visible=False,
-                                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                                    legend=dict(
+                                        orientation="h",
+                                        yanchor="bottom",
+                                        y=1.02,
+                                        xanchor="right",
+                                        x=1,
+                                    ),
                                 )
                                 st.plotly_chart(fig, use_container_width=True)
                             else:
@@ -162,17 +220,17 @@ with tab2:
                             else:
                                 st.warning("뉴스 데이터를 불러오지 못했습니다.")
                 except Exception as e:
-                    st.error(f"분석 중 오류 발생: {e}")
+                    st.error(f"분석 중 오류가 발생했습니다.: {e}")
 
 
 # --- 탭 3: RAG 질의응답 ---
 with tab3:
-    st.header("종목 무엇이든 물어보세요")
+    st.header("무엇이든 물어보세요.")
     st.caption("최신 뉴스를 기반으로 근거 있는 답변을 제공합니다.")
 
     # 사용자 입력
     stock_code = st.text_input("종목 코드 (예: 005930.KS)", "005930.KS")
-    question = st.text_input("질문 내용", "요즘 삼성전자 왜 이렇게 떨어져?")
+    question = st.text_input("질문 내용", "요즘 이 종목 왜 이렇게 떨어져?")
 
     if st.button("질문하기"):
         if not stock_code or not question:
@@ -205,7 +263,7 @@ with tab3:
                     else:
                         st.error("답변 생성에 실패했습니다.")
                 except Exception as e:
-                    st.error(f"오류 발생: {e}")
+                    st.error(f"오류가 발생했습니다.: {e}")
 
 # --- 탭 4: 추천 이력 ---
 with tab4:
@@ -239,7 +297,7 @@ with tab4:
                             st.text("추천된 종목이 없습니다.")
                         st.divider()
             except Exception as e:
-                st.error(f"이력 조회 중 오류 발생: {e}")
+                st.error(f"이력 조회 중 오류가 발생했습니다.: {e}")
 
 # --- 탭 5: 백테스트 ---
 with tab5:
@@ -248,7 +306,7 @@ with tab5:
 
     target_date = st.date_input("백테스트 기준일")
     backtest_strategy = st.selectbox(
-        "백테스트 전략", ["day_trader", "long_term"], index=0
+        "백테스트 전략", ["day_trader", "long_term_trader"], index=0
     )
 
     if st.button("백테스트 실행"):
@@ -266,10 +324,12 @@ with tab5:
                 backtest_results = result_data.get("backtest_result", [])
 
                 if not backtest_results:
-                    st.warning("백테스트 결과가 없습니다. 추천된 종목이 없었을 수 있습니다.")
+                    st.warning(
+                        "백테스트 결과가 없습니다. 추천된 종목이 없었을 수 있습니다."
+                    )
                 else:
                     st.subheader("📈 백테스트 결과")
                     df = pd.DataFrame(backtest_results)
                     st.dataframe(df)
             except Exception as e:
-                st.error(f"백테스트 중 오류 발생: {e}")
+                st.error(f"백테스트 중 오류가 발생했습니다.: {e}")
