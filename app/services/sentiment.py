@@ -10,14 +10,18 @@ from typing import List
 from urllib.parse import parse_qs, quote_plus, urlparse
 
 import httpx
-from transformers import (AutoModelForSequenceClassification, AutoTokenizer,
-                          pipeline)
+from transformers import AutoModelForSequenceClassification, AutoTokenizer, pipeline
 
-from ..config import (NAVER_CLIENT_ID, NAVER_CLIENT_SECRET, NEWS_MAX,
-                      SENTIMENT_BATCH_SIZE,
-                      SENTIMENT_CONFIDENCE_THRESHOLD_NEUTRAL,
-                      SENTIMENT_CONFIDENCE_THRESHOLD_STRONG,
-                      SENTIMENT_MODEL_ID, SENTIMENT_NEWS_WEIGHT_DECAY_RATE)
+from ..config import (
+    NAVER_CLIENT_ID,
+    NAVER_CLIENT_SECRET,
+    NEWS_MAX,
+    SENTIMENT_BATCH_SIZE,
+    SENTIMENT_CONFIDENCE_THRESHOLD_NEUTRAL,
+    SENTIMENT_CONFIDENCE_THRESHOLD_STRONG,
+    SENTIMENT_MODEL_ID,
+    SENTIMENT_NEWS_WEIGHT_DECAY_RATE,
+)
 
 # oid: 네이버 뉴스 검색 결과에서 언론사를 의미하는 link URL의 쿼리 파라미터
 # 주요 언론사의 oid를 매핑하여 발행처를 식별하는 데 사용
@@ -90,7 +94,9 @@ async def sentiment_lifespan(app):
             # app.state에 직접 파이프라인 설정
             app.state.analysis_service.sentiment_pipe = pipe
             app.state.sentiment_pipe = pipe
-            logging.info(f"Sentiment pipeline 준비 완료 되었습니다.: {SENTIMENT_MODEL_ID}")
+            logging.info(
+                f"Sentiment pipeline 준비 완료 되었습니다.: {SENTIMENT_MODEL_ID}"
+            )
 
         except Exception as e:
             logging.error(f"Sentiment pipeline 초기화 중 오류가 발생하였습니다.: {e}")

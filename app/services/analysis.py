@@ -11,15 +11,21 @@ from sqlalchemy.orm import Session
 
 from app.config import MARKET, NEWS_MAX, TZ
 from app.core.market_analysis import determine_market_regime
-from app.core.presentation import (calculate_stock_stars,
-                                   generate_friendly_reason,
-                                   generate_ma_comment, scale_to_100)
+from app.core.presentation import (
+    calculate_stock_stars,
+    generate_friendly_reason,
+    generate_ma_comment,
+    scale_to_100,
+)
 from app.core.scoring import calculate_z_scores, compute_features, score_stock
 from app.db.db_models import RecommendationRun, RecommendedStock
 from app.schemas.enums import StrategyEnum
 from app.schemas.models import FeatureConf, RecoItem, RecoResponse, StockScore
-from app.services.market_data import (_fetch_stock_info, fetch_ohlcv,
-                                      get_stock_name_from_code)
+from app.services.market_data import (
+    _fetch_stock_info,
+    fetch_ohlcv,
+    get_stock_name_from_code,
+)
 from app.services.sentiment import analyze_news_sentiment, fetch_news_titles
 from app.services.universe import get_universe
 

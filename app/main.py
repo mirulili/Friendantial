@@ -19,8 +19,7 @@ from app.db.db_models import Base
 from app.llm.llm_clients import GeminiChatClient  # 사용할 LLM 클라이언트들 임포트
 from app.llm.llm_clients import OpenAIChatClient
 from app.llm.rag import rag_engine
-from app.routers import (backtest, basic_analysis, history, market, opinion,
-                         reporting)
+from app.routers import backtest, basic_analysis, history, market, opinion, reporting
 from app.services.analysis import AnalysisService
 from app.services.sentiment import sentiment_lifespan
 

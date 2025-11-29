@@ -3,8 +3,12 @@ from typing import List, Tuple
 
 import pandas as pd
 
-from ..config import (RSI_OVERBOUGHT, RSI_OVERSOLD, RSI_STRONG_OVERBOUGHT,
-                      STRATEGY_CONFIG)
+from ..config import (
+    RSI_OVERBOUGHT,
+    RSI_OVERSOLD,
+    RSI_STRONG_OVERBOUGHT,
+    STRATEGY_CONFIG,
+)
 
 
 class BaseStrategy(ABC):

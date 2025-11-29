@@ -7,8 +7,12 @@ import redis.asyncio as redis
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from sqlalchemy.orm import Session
 
-from app.dependencies import (get_db, get_http_client, get_redis_connection,
-                              get_sentiment_analyzer)
+from app.dependencies import (
+    get_db,
+    get_http_client,
+    get_redis_connection,
+    get_sentiment_analyzer,
+)
 from app.schemas.enums import StrategyEnum
 from app.schemas.models import RecoResponse
 from app.services.analysis import AnalysisService

@@ -8,8 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from jinja2 import Environment
 
 from app.core.strategies import get_strategy
-from app.dependencies import (get_jinja_env, get_llm_client,
-                              get_redis_connection)
+from app.dependencies import get_jinja_env, get_llm_client, get_redis_connection
 from app.llm.llm_service import generate_text_with_persona
 from app.llm.prompt_builder import build_prompt
 from app.routers.basic_analysis import get_analysis_service

@@ -5,8 +5,12 @@ import redis.asyncio as redis
 from fastapi import APIRouter, Depends, Path, Query, Request
 from jinja2 import Environment
 
-from app.dependencies import (get_http_client, get_jinja_env, get_llm_client,
-                              get_redis_connection)
+from app.dependencies import (
+    get_http_client,
+    get_jinja_env,
+    get_llm_client,
+    get_redis_connection,
+)
 from app.llm.llm_service import generate_text_with_persona
 from app.llm.prompt_builder import build_prompt
 from app.schemas.enums import PersonaEnum

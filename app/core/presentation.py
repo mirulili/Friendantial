@@ -1,7 +1,11 @@
 # app/core/presentation.py
 
-from ..config import (RSI_EXTREME_OVERBOUGHT, RSI_OVERBOUGHT, RSI_OVERSOLD,
-                      RSI_STRONG_OVERBOUGHT)
+from ..config import (
+    RSI_EXTREME_OVERBOUGHT,
+    RSI_OVERBOUGHT,
+    RSI_OVERSOLD,
+    RSI_STRONG_OVERBOUGHT,
+)
 from ..schemas.models import RecoItem, StockScore
 
 
