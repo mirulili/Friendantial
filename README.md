@@ -1,5 +1,7 @@
 # Friendantial
 
+[Read this in English](./README_eng.md)
+
 Friendantial은 투자자가 시장을 분석할 때 참고할 수 있는 주식 추천 및 분석 리포트를 제공하는 API 서버입니다. 복잡한 금융 데이터를 AI와 LLM을 통해 분석하여, 이해하기 쉬운 자연어 리포트와 정량적인 추천 점수를 제공합니다.
 
 ## 주요 기능
